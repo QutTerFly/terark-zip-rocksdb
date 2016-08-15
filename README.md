@@ -9,6 +9,7 @@ and greatly improve the reading speed! All data are accessed at memory speed!
 
 - User comparator is not supported, you should encoding your keys to make the
   byte lexical order on key is your required order
+- `EnvOptions::use_mmap_reads` must be `true`
 
 ## Using TerarkZipTable
 
