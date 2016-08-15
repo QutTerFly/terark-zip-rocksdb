@@ -5,6 +5,11 @@ TerarkZipTable leverate terark-zip algorithm to rocksdb, by using TerarkZipTable
 you can store more(3x+ than snappy) on disk and load more more data into memory,
 and greatly improve the reading speed! All data are accessed at memory speed!
 
+## Restrictions
+
+- User comparator is not supported, you should encoding your keys to make the
+  byte lexical order on key is your required order
+
 ## Using TerarkZipTable
 
 ```c++
