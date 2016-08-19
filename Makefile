@@ -163,7 +163,7 @@ ifeq (, ${prefix})
 		prefix := /home/${USER}
 	endif
 endif
-TerarkZipRocks_lib := terark-zip-rocks
+TerarkZipRocks_lib := terark-zip-rocksdb
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
 
 LIB_TERARK_D := -L../terark/lib -lterark-fsa_all-${COMPILER}-d
