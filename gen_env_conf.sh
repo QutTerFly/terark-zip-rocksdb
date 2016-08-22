@@ -97,27 +97,6 @@ if $CXX is_cygwin.cpp -o is_cygwin.exe; then
 fi
 rm -f is_cygwin.*
 
-cat > has_inheriting_cons.cpp << "EOF"
-struct A {
-	A(int) {}
-	A(int,int){}
-};
-struct B : public A {
-	using A::A;
-};
-int main() {
-	B b1(111);
-	B b2(2,2);
-	return 0;
-}
-EOF
-rm -f src/terark/my_auto_config.hpp
-touch src/terark/my_auto_config.hpp
-if $CXX -std=c++11 has_inheriting_cons.cpp > /dev/null 2>&1; then
-	echo '#define TERARK_HAS_INHERITING_CONSTRUCTORS' >> src/terark/my_auto_config.hpp
-fi
-rm -f has_inheriting_cons.cpp
-
 if [ "$IS_CYGWIN" -eq 1 ]; then
 	rm -f a.exe
 else
