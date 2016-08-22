@@ -1,6 +1,6 @@
 DBG_FLAGS ?= -g3 -D_DEBUG
 RLS_FLAGS ?= -O3 -DNDEBUG
-WITH_BMI2 ?= $(shell ./cpu_has_bmi2.sh)
+WITH_BMI2 ?= $(shell sh ./cpu_has_bmi2.sh)
 ROCKSDB_SRC ?= ../rocksdb
 
 ifeq "$(origin LD)" "default"
