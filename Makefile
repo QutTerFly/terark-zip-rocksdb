@@ -229,14 +229,20 @@ pkg: ${TerarkZipRocks_d} ${TerarkZipRocks_r}
 	mkdir -p ${TarBall}/include/table
 ifeq (${PKG_WITH_DBG},1)
 	cp    ${TerarkZipRocks_d} ${TarBall}/lib
+	cp    lib/lib${TerarkZipRocks_lib}-${COMPILER}-d.a ${TarBall}/lib
 	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-d${DLL_SUFFIX} \
 	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-d${DLL_SUFFIX}
+	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-d.a \
+	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-d.a
 endif
 	cp    ${TerarkZipRocks_r} ${TarBall}/lib
+	cp    lib/lib${TerarkZipRocks_lib}-${COMPILER}-r.a ${TarBall}/lib
 	cp    ../terark/lib/libterark-fsa_all-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
 	cp    src/table/*.h           ${TarBall}/include/table
 	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r${DLL_SUFFIX} \
 	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r${DLL_SUFFIX}
+	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r.a \
+	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r.a
 	ln -s libterark-fsa_all-${COMPILER}-r${DLL_SUFFIX}  \
 	   ${TarBall}/lib/libterark-fsa_all-r${DLL_SUFFIX}
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
