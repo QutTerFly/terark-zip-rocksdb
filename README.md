@@ -26,6 +26,11 @@ and greatly improve the reading speed! All data are accessed at memory speed!
   /// IO, although SSD is better...
   opt.localTempDir = "/path/to/some/temp/dir"; // default is "/tmp"
 
+  /// 0 : check sum nothing
+  /// 1 : check sum meta data and index, check on file load
+  /// 2 : check sum all data, not check on file load, check on record read
+  opt.checksumLevel = 2; // default 1
+
   TableFactory* factory = NewTerarkZipTableFactory(opt);
   options.table_factory.reset(factory);
   // the best way is to just using TerarkZipTable for top most level
