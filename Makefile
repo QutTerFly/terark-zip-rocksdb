@@ -169,8 +169,8 @@ endif
 TerarkZipRocks_lib := terark-zip-rocksdb
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
 
-LIB_TERARK_D := -L../terark/lib -lterark-fsa_all-${COMPILER}-d
-LIB_TERARK_R := -L../terark/lib -lterark-fsa_all-${COMPILER}-r
+LIB_TERARK_D := -L../terark/lib -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
+LIB_TERARK_R := -L../terark/lib -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
 
 #function definition
 #@param:${1} -- targets var prefix, such as bdb_util | core
@@ -237,14 +237,17 @@ ifeq (${PKG_WITH_DBG},1)
 endif
 	cp    ${TerarkZipRocks_r} ${TarBall}/lib
 	cp    lib/lib${TerarkZipRocks_lib}-${COMPILER}-r.a ${TarBall}/lib
-	cp    ../terark/lib/libterark-fsa_all-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
+	cp    ../terark/lib/libterark-fsa-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
+	cp    ../terark/lib/libterark-core-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
 	cp    src/table/*.h           ${TarBall}/include/table
 	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r${DLL_SUFFIX} \
 	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r${DLL_SUFFIX}
 	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r.a \
 	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r.a
-	ln -s libterark-fsa_all-${COMPILER}-r${DLL_SUFFIX}  \
-	   ${TarBall}/lib/libterark-fsa_all-r${DLL_SUFFIX}
+	ln -s libterark-fsa-${COMPILER}-r${DLL_SUFFIX}  \
+	   ${TarBall}/lib/libterark-fsa-r${DLL_SUFFIX}
+	ln -s libterark-core-${COMPILER}-r${DLL_SUFFIX}  \
+	   ${TarBall}/lib/libterark-core-r${DLL_SUFFIX}
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
 	tar czf ${TarBall}.tgz ${TarBall}
@@ -290,11 +293,11 @@ depends : ${alldep}
 
 ${ddir}/%.exe: ${ddir}/%.o
 	@echo Linking ... $@
-	${LD} ${LDFLAGS} -o $@ $< -Llib -lterark-db-${COMPILER}-d -L../terark/lib -lterark-fsa_all-${COMPILER}-d ${LIBS}
+	${LD} ${LDFLAGS} -o $@ $< -Llib -lterark-db-${COMPILER}-d -L../terark/lib -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d ${LIBS}
 
 ${rdir}/%.exe: ${ddir}/%.o
 	@echo Linking ... $@
-	${LD} ${LDFLAGS} -o $@ $< -Llib -lterark-db-${COMPILER}-r -L../terark/lib -lterark-fsa_all-${COMPILER}-r ${LIBS}
+	${LD} ${LDFLAGS} -o $@ $< -Llib -lterark-db-${COMPILER}-r -L../terark/lib -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r ${LIBS}
 
 ${ddir}/%.o: %.cpp
 	@echo file: $< "->" $@
