@@ -13,7 +13,8 @@ endif
 COMPILER := $(shell ${CXX} tools/configure/compiler.cpp -o a && ./a && rm -f a a.exe)
 #$(error COMPILER=${COMPILER})
 UNAME_MachineSystem := $(shell uname -m -s | sed 's:[ /]:-:g')
-BUILD_ROOT := build/${COMPILER}-${UNAME_MachineSystem}-bmi2-${WITH_BMI2}
+BUILD_NAME := ${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}
+BUILD_ROOT := build/${BUILD_NAME}
 ddir:=${BUILD_ROOT}/dbg
 rdir:=${BUILD_ROOT}/rls
 
@@ -220,9 +221,15 @@ ${TerarkZipRocks_r} : $(call objs,TerarkZipRocks,r)
 ${static_TerarkZipRocks_d} : $(call objs,TerarkZipRocks,d)
 ${static_TerarkZipRocks_r} : $(call objs,TerarkZipRocks,r)
 
-TarBall := pkg/${TerarkZipRocks_lib}-${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}
+TarBall := pkg/${TerarkZipRocks_lib}-${BUILD_NAME}
 .PHONY : pkg
-pkg: ${TerarkZipRocks_d} ${TerarkZipRocks_r}
+pkg : ${TarBall}.tgz
+scp : ${TarBall}.tgz.scp.done
+${TarBall}.tgz.scp.done: ${TarBall}.tgz
+	scp -P 22    $< root@nark.cc:/var/www/html/download/
+	touch $@
+
+${TarBall}.tgz: ${TerarkZipRocks_d} ${TerarkZipRocks_r}
 	rm -rf ${TarBall}
 	mkdir -p ${TarBall}/lib
 	mkdir -p ${TarBall}/bin
