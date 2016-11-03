@@ -244,8 +244,9 @@ ifeq (${PKG_WITH_DBG},1)
 endif
 	cp    ${TerarkZipRocks_r} ${TarBall}/lib
 	cp    lib/lib${TerarkZipRocks_lib}-${COMPILER}-r.a ${TarBall}/lib
-	cp    ../terark/lib/libterark-fsa-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
-	cp    ../terark/lib/libterark-core-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
+	cp    ../terark/${BUILD_ROOT}/lib/libterark-zbs-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
+	cp    ../terark/${BUILD_ROOT}/lib/libterark-fsa-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
+	cp    ../terark/${BUILD_ROOT}/lib/libterark-core-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
 	cp    src/table/*.h           ${TarBall}/include/table
 	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r${DLL_SUFFIX} \
 	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r${DLL_SUFFIX}
