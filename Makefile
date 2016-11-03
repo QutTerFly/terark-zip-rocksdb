@@ -170,8 +170,8 @@ endif
 TerarkZipRocks_lib := terark-zip-rocksdb
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
 
-LIB_TERARK_D := -L../terark/lib -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
-LIB_TERARK_R := -L../terark/lib -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
+LIB_TERARK_D := -L../terark/${BUILD_ROOT}/lib -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
+LIB_TERARK_R := -L../terark/${BUILD_ROOT}/lib -lterark-zbs-${COMPILER}-r -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
 
 #function definition
 #@param:${1} -- targets var prefix, such as bdb_util | core
