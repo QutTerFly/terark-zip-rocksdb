@@ -180,10 +180,10 @@ objs = $(addprefix ${${2}dir}/, $(addsuffix .o, $(basename ${${1}_src})))
 
 TerarkZipRocks_d_o := $(call objs,TerarkZipRocks,d)
 TerarkZipRocks_r_o := $(call objs,TerarkZipRocks,r)
-TerarkZipRocks_d := lib/lib${TerarkZipRocks_lib}-${COMPILER}-d${DLL_SUFFIX}
-TerarkZipRocks_r := lib/lib${TerarkZipRocks_lib}-${COMPILER}-r${DLL_SUFFIX}
-static_TerarkZipRocks_d := lib/lib${TerarkZipRocks_lib}-${COMPILER}-d.a
-static_TerarkZipRocks_r := lib/lib${TerarkZipRocks_lib}-${COMPILER}-r.a
+TerarkZipRocks_d := ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-${COMPILER}-d${DLL_SUFFIX}
+TerarkZipRocks_r := ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-${COMPILER}-r${DLL_SUFFIX}
+static_TerarkZipRocks_d := ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-${COMPILER}-d.a
+static_TerarkZipRocks_r := ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-${COMPILER}-r.a
 
 ALL_TARGETS = TerarkZipRocks
 DBG_TARGETS = ${TerarkZipRocks_d}
@@ -235,27 +235,13 @@ ${TarBall}.tgz: ${TerarkZipRocks_d} ${TerarkZipRocks_r}
 	mkdir -p ${TarBall}/bin
 	mkdir -p ${TarBall}/include/table
 ifeq (${PKG_WITH_DBG},1)
-	cp    ${TerarkZipRocks_d} ${TarBall}/lib
-	cp    lib/lib${TerarkZipRocks_lib}-${COMPILER}-d.a ${TarBall}/lib
-	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-d${DLL_SUFFIX} \
-	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-d${DLL_SUFFIX}
-	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-d.a \
-	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-d.a
+	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*-d${DLL_SUFFIX} ${TarBall}/lib
 endif
-	cp    ${TerarkZipRocks_r} ${TarBall}/lib
-	cp    lib/lib${TerarkZipRocks_lib}-${COMPILER}-r.a ${TarBall}/lib
-	cp    ../terark/${BUILD_ROOT}/lib/libterark-zbs-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
-	cp    ../terark/${BUILD_ROOT}/lib/libterark-fsa-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
-	cp    ../terark/${BUILD_ROOT}/lib/libterark-core-${COMPILER}-r${DLL_SUFFIX} ${TarBall}/lib
-	cp    src/table/*.h           ${TarBall}/include/table
-	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r${DLL_SUFFIX} \
-	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r${DLL_SUFFIX}
-	ln -s lib${TerarkZipRocks_lib}-${COMPILER}-r.a \
-	   ${TarBall}/lib/lib${TerarkZipRocks_lib}-r.a
-	ln -s libterark-fsa-${COMPILER}-r${DLL_SUFFIX}  \
-	   ${TarBall}/lib/libterark-fsa-r${DLL_SUFFIX}
-	ln -s libterark-core-${COMPILER}-r${DLL_SUFFIX}  \
-	   ${TarBall}/lib/libterark-core-r${DLL_SUFFIX}
+	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*-r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*-r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*-r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*-r${DLL_SUFFIX} ${TarBall}/lib
+	cp src/table/*.h           ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
 	tar czf ${TarBall}.tgz ${TarBall}
@@ -266,11 +252,11 @@ endif
 	@echo BOOST_INC=${BOOST_INC} BOOST_SUFFIX=${BOOST_SUFFIX}
 	@echo -e "OBJS:" $(addprefix "\n  ",$(sort $(filter %.o,$^)))
 	@echo -e "LIBS:" $(addprefix "\n  ",${LIBS})
-	@mkdir -p lib
+	@mkdir -p ${BUILD_ROOT}/lib
 	@rm -f $@
 	@rm -f $(subst -${COMPILER},, $@)
-	@ln -sf $(notdir $@) $(subst -${COMPILER},, $@)
 	@${LD} -shared $(sort $(filter %.o,$^)) ${LDFLAGS} ${LIBS} -o ${CYG_DLL_FILE} ${CYGWIN_LDFLAGS}
+	cd ${BUILD_ROOT}/lib; ln -sf $(notdir $@) $(subst -${COMPILER},,$(notdir $@))
 ifeq (CYGWIN, ${UNAME_System})
 	@cp -l -f ${CYG_DLL_FILE} /usr/bin
 endif
@@ -281,10 +267,11 @@ endif
 	@echo BOOST_INC=${BOOST_INC} BOOST_SUFFIX=${BOOST_SUFFIX}
 	@echo -e "OBJS:" $(addprefix "\n  ",$(sort $(filter %.o,$^)))
 	@echo -e "LIBS:" $(addprefix "\n  ",${LIBS})
-	@mkdir -p lib
+	@mkdir -p ${BUILD_ROOT}/lib
+	@rm -f $@
 	@rm -f $(subst -${COMPILER},, $@)
-	@ln -sf $(notdir $@) $(subst -${COMPILER},, $@)
 	@${AR} rcs $@ $(filter %.o,$^)
+	cd ${BUILD_ROOT}/lib; ln -sf $(notdir $@) $(subst -${COMPILER},,$(notdir $@))
 
 .PHONY : install
 install : TerarkZipRocks
