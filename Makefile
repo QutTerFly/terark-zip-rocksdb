@@ -235,12 +235,12 @@ ${TarBall}.tgz: ${TerarkZipRocks_d} ${TerarkZipRocks_r}
 	mkdir -p ${TarBall}/bin
 	mkdir -p ${TarBall}/include/table
 ifeq (${PKG_WITH_DBG},1)
-	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*-d${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*d${DLL_SUFFIX} ${TarBall}/lib
 endif
-	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*-r${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*-r${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*-r${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*-r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*r${DLL_SUFFIX} ${TarBall}/lib
 	cp src/table/*.h           ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
