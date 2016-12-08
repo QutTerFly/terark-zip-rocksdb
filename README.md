@@ -1,5 +1,5 @@
 # terark-zip-rocksdb
-TerarkZipTable for rocksdb is a rocksdb Table implementation.
+TerarkZipTable for rocksdb is a rocksdb SSTable(Static Sorted Table) implementation.
 
 TerarkZipTable leverate terark-zip algorithm to rocksdb, by using TerarkZipTable,
 you can store more(3x+ than snappy) on disk and load more more data into memory,
