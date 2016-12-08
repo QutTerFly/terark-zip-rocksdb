@@ -38,8 +38,8 @@ see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuni
   ///                   == 0 : all levels using terarkZip
   ///          >= num_levels : all levels using fallback TableFactory
   /// it shown that set terarkZipMinLevel = 0 is the best choice
-  /// if mixed with rocksdb's block compression, the block compressed
-  /// table may using too much memory & SSD, which degrades the performance
+  /// if mixed with rocksdb's native SST, those SSTs may using too much
+  /// memory & SSD, which degrades the performance
   opt.terarkZipMinLevel = 0; // default
 
   /// optional
