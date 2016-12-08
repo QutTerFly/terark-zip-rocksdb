@@ -67,7 +67,7 @@ see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuni
   /// universal compaction reduce write amplification and is more friendly for
   /// large SST file, terark SST is better on larger SST file.
   /// although universal compaction needs 2x SSD space on worst case, but
-  /// terark-zip's high compression, the used SSD space is much smaller
+  /// with terark-zip's high compression, the used SSD space is much smaller
   /// than rocksdb's block compression schema
   options.compaction_style = rocksdb::kCompactionStyleUniversal;
 
