@@ -23,7 +23,7 @@ you must get [our](http://terark.com) comercial license to use this software.
 
 ## Use our fork of rocksdb
 [our fork of rocksdb](https://github.com/rockeet/rocksdb)
-We changed rocksdb a little to support two-pass scan for building SSTable.
+<BR>We changed rocksdb a little to support two-pass scan for building SSTable.
 
 ## Restrictions
 
