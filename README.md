@@ -14,10 +14,10 @@ but you can not compile this software by yourself,
 you must get [our](http://terark.com) comercial license to use this software in production.
 <BR>[About us](http://terark.com)
 
-## Downloads precompiled trail version
-- [terark-zip-rocksdb-trail-Linux-x86\_64-g++-5.4-bmi2-1.tgz](http://nark.cc/download/terark-zip-rocksdb-trail-Linux-x86_64-g++-5.4-bmi2-1.tgz)
+## Downloads precompiled trial version
+- [terark-zip-rocksdb-trial-Linux-x86\_64-g++-5.4-bmi2-1.tgz](http://nark.cc/download/terark-zip-rocksdb-trial-Linux-x86_64-g++-5.4-bmi2-1.tgz)
   <BR>bmi2-1 means this software can only run on intel-haswell or newer CPU
-- [terark-zip-rocksdb-trail-Linux-x86\_64-g++-5.4-bmi2-0.tgz](http://nark.cc/download/terark-zip-rocksdb-trail-Linux-x86_64-g++-5.4-bmi2-0.tgz)
+- [terark-zip-rocksdb-trial-Linux-x86\_64-g++-5.4-bmi2-0.tgz](http://nark.cc/download/terark-zip-rocksdb-trial-Linux-x86_64-g++-5.4-bmi2-0.tgz)
   <BR>bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
 - [more downloads](http://nark.cc/download)
 
@@ -30,7 +30,7 @@ you must get [our](http://terark.com) comercial license to use this software in 
 - User comparator is not supported, you should encoding your keys to make the
   byte lexical order on key is your required order
 - `EnvOptions::use_mmap_reads` must be `true`, can be set by `DBOptions::allow_mmap_reads`
-- In trail version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
+- In trial version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
   can run benchmark, but you can not use terark-zip-rocksdb in production
 
 ## Using TerarkZipTable
@@ -44,7 +44,7 @@ CXXFLAGS += -I/path/to/terark-zip-rocksdb
 - Linker flags
 ```makefile
 LDFLAGS += -L/path/to/terark-zip-rocksdb-lib
-LDFLAGS += -lterark-zip-rocksdb-r # trail version: -lterark-zip-rocksdb-trail-r
+LDFLAGS += -lterark-zip-rocksdb-r # trial version: -lterark-zip-rocksdb-trial-r
 LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
 ```
 

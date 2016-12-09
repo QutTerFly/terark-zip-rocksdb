@@ -114,8 +114,8 @@ DEFS += -DROCKSDB_PLATFORM_POSIX
 ifeq (Darwin,${UNAME_System})
   DEFS += -DOS_MACOSX
 endif
-ifneq (${TERARK_ZIP_TRAIL_VERSION},)
-  DEFS += -DTERARK_ZIP_TRAIL_VERSION
+ifneq (${TERARK_ZIP_TRIAL_VERSION},)
+  DEFS += -DTERARK_ZIP_TRIAL_VERSION
 endif
 override CFLAGS   += ${DEFS}
 override CXXFLAGS += ${DEFS}
@@ -170,7 +170,7 @@ ifeq (, ${prefix})
 		prefix := /home/${USER}
 	endif
 endif
-TerarkZipRocks_lib := terark-zip-rocksdb${TERARK_ZIP_TRAIL_VERSION}
+TerarkZipRocks_lib := terark-zip-rocksdb${TERARK_ZIP_TRIAL_VERSION}
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
 
 LIB_TERARK_D := -L../terark/${BUILD_ROOT}/lib -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
