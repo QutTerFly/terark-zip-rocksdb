@@ -35,7 +35,7 @@ you must get [our](http://terark.com) comercial license to use this software in 
 
 ## Using TerarkZipTable
 
-### Now only just for C++
+### Now just for C++
 
 - Compile flags
 ```makefile
@@ -47,6 +47,8 @@ LDFLAGS += -L/path/to/terark-zip-rocksdb-lib
 LDFLAGS += -lterark-zip-rocksdb-r # trail version: -lterark-zip-rocksdb-trail-r
 LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
 ```
+
+- C++ code
 
 ```c++
 #include <table/terark_zip_table.h>
