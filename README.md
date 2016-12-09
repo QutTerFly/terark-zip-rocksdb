@@ -12,6 +12,7 @@ see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuni
 This software is open source, you can read the source code,
 but you can not compile this software by yourself,
 you must get [our](http://terark.com) comercial license to use this software.
+<BR>[About us](http://terark.com)
 
 ## Downloads precompiled trail version
 - [terark-zip-rocksdb-trail-Linux-x86\_64-g++-5.4-bmi2-1.tgz](http://nark.cc/download/terark-zip-rocksdb-trail-Linux-x86_64-g++-5.4-bmi2-1.tgz)
