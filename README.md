@@ -21,8 +21,8 @@ you must get [our](http://terark.com) comercial license to use this software in 
   <BR>bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
 - [more downloads](http://nark.cc/download)
 
-## Use our fork of rocksdb
-[our fork of rocksdb](https://github.com/rockeet/rocksdb)
+## Must use our fork of rocksdb
+[Our fork of rocksdb](https://github.com/rockeet/rocksdb)
 <BR>We changed rocksdb a little to support two-pass scan for building SSTable.
 
 ## Restrictions
