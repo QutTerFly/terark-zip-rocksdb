@@ -8,11 +8,30 @@ and greatly improve the reading speed! All data are accessed at memory speed!
 Set single SST file larger will get better compression, to tune SST file file size,
 see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide)
 
+## License
+This software is open source, you can read the source code,
+but you can not compile this software by yourself,
+you must get [our](http://terark.com) comercial license to use this software.
+
+## Downloads precompiled trail version
+- [terark-zip-rocksdb-trail-Linux-x86\_64-g++-5.4-bmi2-1.tgz](http://nark.cc/download/terark-zip-rocksdb-trail-Linux-x86_64-g++-5.4-bmi2-1.tgz)
+  <BR>bmi2-1 means this software can only run on intel-haswell or newer CPU
+- [terark-zip-rocksdb-trail-Linux-x86\_64-g++-5.4-bmi2-0.tgz](http://nark.cc/download/terark-zip-rocksdb-trail-Linux-x86_64-g++-5.4-bmi2-0.tgz)
+  <BR>bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
+- [more downloads](http://nark.cc/download)
+
+## Use our fork of rocksdb
+[our fork of rocksdb](https://github.com/rockeet/rocksdb)
+We changed rocksdb a little to support two-pass scan for building SSTable.
+
 ## Restrictions
 
 - User comparator is not supported, you should encoding your keys to make the
   byte lexical order on key is your required order
 - `EnvOptions::use_mmap_reads` must be `true`, can be set by `DBOptions::allow_mmap_reads`
+- You can not compile this software by yourself, you should get our comercial license to use this software,
+  in trail version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
+  can run benchmark, but you can not use terark-zip-rocksdb in production
 
 ## Using TerarkZipTable
 
