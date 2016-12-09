@@ -1,7 +1,7 @@
 # terark-zip-rocksdb
 TerarkZipTable for rocksdb is a rocksdb SSTable(Static Sorted Table) implementation.
 
-TerarkZipTable leverate terark-zip algorithm to rocksdb, by using TerarkZipTable,
+TerarkZipTable leverage terark-zip algorithm to rocksdb, by using TerarkZipTable,
 you can store more(3x+ than snappy) on disk and load more more data into memory,
 and greatly improve the reading speed! All data are accessed at memory speed!
 
@@ -11,7 +11,7 @@ see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuni
 ## License
 This software is open source, you can read the source code,
 but you can not compile this software by yourself,
-you must get [our](http://terark.com) comercial license to use this software.
+you must get [our](http://terark.com) comercial license to use this software in production.
 <BR>[About us](http://terark.com)
 
 ## Downloads precompiled trail version
@@ -30,11 +30,23 @@ you must get [our](http://terark.com) comercial license to use this software.
 - User comparator is not supported, you should encoding your keys to make the
   byte lexical order on key is your required order
 - `EnvOptions::use_mmap_reads` must be `true`, can be set by `DBOptions::allow_mmap_reads`
-- You can not compile this software by yourself, you should get our comercial license to use this software,
-  in trail version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
+- In trail version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
   can run benchmark, but you can not use terark-zip-rocksdb in production
 
 ## Using TerarkZipTable
+
+### Now only just for C++
+
+- Compile flags
+```makefile
+CXXFLAGS += -I/path/to/terark-zip-rocksdb
+```
+- Linker flags
+```makefile
+LDFLAGS += -L/path/to/terark-zip-rocksdb-lib
+LDFLAGS += -lterark-zip-rocksdb-r # trail version: -lterark-zip-rocksdb-trail-r
+LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
+```
 
 ```c++
 #include <table/terark_zip_table.h>
