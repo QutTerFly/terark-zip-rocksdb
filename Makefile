@@ -232,7 +232,8 @@ ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	scp -P 22    $< root@nark.cc:/var/www/html/download/
 	touch $@
 
-${TarBall}.tgz: ${TerarkZipRocks_d} ${TerarkZipRocks_r}
+${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
+                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r}
 	rm -rf ${TarBall}
 	mkdir -p ${TarBall}/lib
 	mkdir -p ${TarBall}/bin
@@ -242,6 +243,31 @@ ifeq (${PKG_WITH_DBG},1)
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*d${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*d${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*d${DLL_SUFFIX} ${TarBall}/lib
+  ifeq (${PKG_WITH_STATIC},1)
+	mkdir -p ${TarBall}/lib_static
+	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*d.a ${TarBall}/lib_static
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*d.a ${TarBall}/lib_static
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*d.a ${TarBall}/lib_static
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*d.a ${TarBall}/lib_static
+  endif
+endif
+ifeq (${PKG_WITH_STATIC},1)
+	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*r.a ${TarBall}/lib_static
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*r.a ${TarBall}/lib_static
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*r.a ${TarBall}/lib_static
+	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*r.a ${TarBall}/lib_static
+endif
+ifeq (${PKG_WITH_DEP},1)
+	for header_dir in `find "../rocksdb/include" -type d`; do \
+		install -d ${TarBall}/"$${header_dir#../rocksdb/}"; \
+	done; \
+	for header in `find "../rocksdb/include" -type f -name '*.h'`; do \
+		install -C -m 644 $$header ${TarBall}/"$${header#../rocksdb/}"; \
+	done
+  ifeq (${PKG_WITH_STATIC},1)
+	cp -a ../rocksdb/librocksdb.a* ${TarBall}/lib_static
+  endif
+	cp -a ../rocksdb/librocksdb.so* ${TarBall}/lib
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*r${DLL_SUFFIX} ${TarBall}/lib
