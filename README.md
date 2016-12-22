@@ -39,7 +39,7 @@ you must get [our](http://terark.com) comercial license to use this software in 
 
 - Compile flags
 ```makefile
-CXXFLAGS += -I/path/to/terark-zip-rocksdb
+CXXFLAGS += -I/path/to/terark-zip-rocksdb/src
 ```
 - Linker flags
 ```makefile
