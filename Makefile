@@ -265,9 +265,9 @@ ifeq (${PKG_WITH_DEP},1)
 		install -C -m 644 $$header ${TarBall}/"$${header#../rocksdb/}"; \
 	done
   ifeq (${PKG_WITH_STATIC},1)
-	cp -a ../rocksdb/librocksdb.a* ${TarBall}/lib_static
+	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.a* ${TarBall}/lib_static
   endif
-	cp -a ../rocksdb/librocksdb.so* ${TarBall}/lib
+	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.so* ${TarBall}/lib
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-*r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-*r${DLL_SUFFIX} ${TarBall}/lib
