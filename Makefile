@@ -257,7 +257,7 @@ ifeq (${PKG_WITH_STATIC},1)
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-*r.a ${TarBall}/lib_static
 	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-*r.a ${TarBall}/lib_static
 endif
-ifeq (${PKG_WITH_DEP},1)
+ifeq (${PKG_WITH_ROCKSDB},1)
 	for header_dir in `find "../rocksdb/include" -type d`; do \
 		install -d ${TarBall}/"$${header_dir#../rocksdb/}"; \
 	done; \
