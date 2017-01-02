@@ -107,15 +107,8 @@ LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
 
   /// larger MemTable yield larger level0 SST file
   /// larger SST file make terark-zip better
-  ///
-  /// rocksdb preallocate file space according to target_file_size,
-  /// this preallocate is aggressive and is likely over allocated
-  /// for TerarkZipTable, we have noticed that disk/SSD space was
-  /// greatly(3x+) over allocated than required, and files was truncated
-  /// when SST building is finished.
-  /// So we need to set target_file_size_base a bit smaller.
   options.write_buffer_size     =  1ull << 30; // 1G
-  options.target_file_size_base = 64ull << 20; // 64M
+  options.target_file_size_base =  1ull << 30; // 1G
 
   /// single sst file size on greater levels should be larger
   /// sstfile_size(level[n+1]) = sstfile_size(level[n]) * target_file_size_multiplier
