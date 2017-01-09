@@ -33,6 +33,19 @@ you must get [our](http://terark.com) comercial license to use this software in 
 - In trial version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
   can run benchmark, but you can not use terark-zip-rocksdb in production
 
+## Cautions & Notes
+- If calling `rocksdb::DB::Open()` with column families, you must set `table_factory` for each `ColumnFamilyDescriptor`
+```
+  // Caution: This Open overload, must set column_families[i].options.table_factory
+  //
+  // You may pass an rocksdb::Option object as db_options, this db_options.table_factory
+  // is NOT what we want!
+  //
+  static Status Open(const DBOptions& db_options, const std::string& name,
+                     const std::vector<ColumnFamilyDescriptor>& column_families,
+                     std::vector<ColumnFamilyHandle*>* handles, DB** dbptr);
+```
+
 ## Using TerarkZipTable
 
 ### Now just for C++
