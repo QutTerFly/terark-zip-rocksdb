@@ -75,8 +75,11 @@ LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
 
   /// 0 : check sum nothing
   /// 1 : check sum meta data and index, check on file load
-  /// 2 : check sum all data, not check on file load, check on record read
-  opt.checksumLevel = 2; // default 1
+  /// 2 : check sum all data, not check on file load, checksum is for
+  ///     each record, this incurs 4 bytes overhead for each record
+  /// 3 : check sum all data with one checksum value, not checksum each record,
+  ///     if checksum doesn't match, load will fail
+  opt.checksumLevel = 3; // default 1
 
   ///    < 0 : only last level using terarkZip
   ///          this is equivalent to terarkZipMinLevel == num_levels-1
