@@ -25,6 +25,14 @@ you must get [our](http://terark.com) comercial license to use this software in 
 [Our fork of rocksdb](https://github.com/rockeet/rocksdb)
 <BR>We changed rocksdb a little to support two-pass scan for building SSTable.
 
+### rocksdb utility tools for terocks(terark-zip-rocksdb)
+
+In this rocksdb fork, we add some extra options to use terocks.
+
+|utility|terocks option|
+|-------|--------------|
+|ldb|`--use_terocks=1`|
+
 ## Restrictions
 
 - User comparator is not supported, you should encoding your keys to make the
