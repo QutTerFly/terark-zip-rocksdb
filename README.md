@@ -140,9 +140,9 @@ LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
 
   /// turn off rocksdb write slowdown, optional. If write slowdown is enabled
   /// and write was really slow down, you may doubt that terark-zip caused it
-  options.level0_slowdown_writes_trigger = 1000;
-  options.level0_stop_writes_trigger = 1000;
-  options.soft_pending_compaction_bytes_limit = 2ull << 40;
-  options.hard_pending_compaction_bytes_limit = 4ull << 40;
+  options.level0_slowdown_writes_trigger = INT_MAX;
+  options.level0_stop_writes_trigger = INT_MAX;
+  options.soft_pending_compaction_bytes_limit = 0;
+  options.hard_pending_compaction_bytes_limit = 0;
 ```
 
