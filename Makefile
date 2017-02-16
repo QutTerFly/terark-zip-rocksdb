@@ -14,6 +14,7 @@ tmpfile := $(shell mktemp compiler-XXXXXX)
 COMPILER := $(shell ${CXX} tools/configure/compiler.cpp -o ${tmpfile}.exe && ./${tmpfile}.exe && rm -f ${tmpfile}*)
 #$(error COMPILER=${COMPILER})
 UNAME_MachineSystem := $(shell uname -m -s | sed 's:[ /]:-:g')
+TerarkLibDir := ../terark/build/${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}/lib
 BUILD_NAME := ${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}${TERARK_ZIP_TRIAL_VERSION}
 BUILD_ROOT := build/${BUILD_NAME}
 ddir:=${BUILD_ROOT}/dbg
@@ -174,8 +175,8 @@ endif
 TerarkZipRocks_lib := terark-zip-rocksdb${TERARK_ZIP_TRIAL_VERSION}
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
 
-LIB_TERARK_D := -L../terark/${BUILD_ROOT}/lib -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
-LIB_TERARK_R := -L../terark/${BUILD_ROOT}/lib -lterark-zbs-${COMPILER}-r -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
+LIB_TERARK_D := -L${TerarkLibDir} -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
+LIB_TERARK_R := -L${TerarkLibDir} -lterark-zbs-${COMPILER}-r -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
 
 #function definition
 #@param:${1} -- targets var prefix, such as bdb_util | core
@@ -241,22 +242,22 @@ ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
 	mkdir -p ${TarBall}/include/table
 ifeq (${PKG_WITH_DBG},1)
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}d${DLL_SUFFIX} ${TarBall}/lib
   ifeq (${PKG_WITH_STATIC},1)
 	mkdir -p ${TarBall}/lib_static
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}d.a ${TarBall}/lib_static
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-{${COMPILER}-,}d.a ${TarBall}/lib_static
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-{${COMPILER}-,}d.a ${TarBall}/lib_static
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-{${COMPILER}-,}d.a ${TarBall}/lib_static
+	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}d.a ${TarBall}/lib_static
+	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}d.a ${TarBall}/lib_static
+	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}d.a ${TarBall}/lib_static
   endif
 endif
 ifeq (${PKG_WITH_STATIC},1)
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r.a ${TarBall}/lib_static
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-{${COMPILER}-,}r.a ${TarBall}/lib_static
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-{${COMPILER}-,}r.a ${TarBall}/lib_static
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-{${COMPILER}-,}r.a ${TarBall}/lib_static
+	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r.a ${TarBall}/lib_static
+	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r.a ${TarBall}/lib_static
+	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}r.a ${TarBall}/lib_static
 endif
 ifeq (${PKG_WITH_ROCKSDB},1)
 	for header_dir in `find "../rocksdb/include" -type d`; do \
@@ -271,9 +272,9 @@ ifeq (${PKG_WITH_ROCKSDB},1)
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.so* ${TarBall}/lib
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-fsa-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
-	cp -a ../terark/${BUILD_ROOT}/lib/libterark-core-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
+	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp src/table/*.h           ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
