@@ -1,148 +1,21 @@
-# terark-zip-rocksdb
-TerarkZipTable for rocksdb is a rocksdb SSTable(Static Sorted Table) implementation.
+# TerocksDB 
 
-TerarkZipTable leverage terark-zip algorithm to rocksdb, by using TerarkZipTable,
-you can store more(3x+ than snappy) on disk and load more more data into memory,
-and greatly improve the reading speed! All data are accessed at memory speed!
+TerocksDB is a core product from [Terark](http://www.terark.com). It is a RocksDB distribution that powered by TerarkDB's algorithms.
 
-Set single SST file larger will get better compression, to tune SST file file size,
-see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide)
+With our unique and cutting-edge algorithms, TerocksDB is able to store more data and access much faster than RocksDB(3+X more data and 10+X faster).
 
-## License
+TerocksDB is completely compitable with official RocksDB, we didn't its existing behavior, just added a new SSTable implemention to it.
+
+
+# License
 This software is open source, you can read the source code,
 but you can not compile this software by yourself,
 you must get [our](http://terark.com) comercial license to use this software in production.
-<BR>[About us](http://terark.com)
 
-## Downloads precompiled trial version
-- [terark-zip-rocksdb-trial-Linux-x86\_64-g++-5.4-bmi2-1.tgz](http://nark.cc/download/terark-zip-rocksdb-trial-Linux-x86_64-g++-5.4-bmi2-1.tgz)
-  <BR>bmi2-1 means this software can only run on intel-haswell or newer CPU
-- [terark-zip-rocksdb-trial-Linux-x86\_64-g++-5.4-bmi2-0.tgz](http://nark.cc/download/terark-zip-rocksdb-trial-Linux-x86_64-g++-5.4-bmi2-0.tgz)
-  <BR>bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
-- [more downloads](http://nark.cc/download)
+- contact@terark.com
+- [Terark.com](www.terark.com)
 
-## Must use our fork of rocksdb
-[Our fork of rocksdb](https://github.com/rockeet/rocksdb)
-<BR>We changed rocksdb a little to support two-pass scan for building SSTable.
+# Documentation
+Now you can experience our product easily, please refer to our product documentation for more detail.
 
-### rocksdb utility tools for terocks(terark-zip-rocksdb)
-
-In this rocksdb fork, we add some extra options to use terocks.
-
-|utility|terocks option|
-|-------|--------------|
-|ldb|`--use_terocks=1`|
-
-## Restrictions
-
-- User comparator is not supported, you should encoding your keys to make the
-  byte lexical order on key is your required order
-- `EnvOptions::use_mmap_reads` must be `true`, can be set by `DBOptions::allow_mmap_reads`
-- In trial version, we [randomly discard 0.1% of all data](https://github.com/Terark/terark-zip-rocksdb/blob/master/src/table/terark_zip_table.cc#L1002) during SSTable build, so you
-  can run benchmark, but you can not use terark-zip-rocksdb in production
-
-## Cautions & Notes
-- If calling `rocksdb::DB::Open()` with column families, you must set `table_factory` for each `ColumnFamilyDescriptor`
-```
-  // Caution: This Open overload, must set column_families[i].options.table_factory
-  //
-  // You may pass an rocksdb::Option object as db_options, this db_options.table_factory
-  // is NOT what we want!
-  //
-  static Status Open(const DBOptions& db_options, const std::string& name,
-                     const std::vector<ColumnFamilyDescriptor>& column_families,
-                     std::vector<ColumnFamilyHandle*>* handles, DB** dbptr);
-```
-
-## Using TerarkZipTable
-
-### Now just for C++
-
-- Compile flags
-```makefile
-CXXFLAGS += -I/path/to/terark-zip-rocksdb/src
-```
-- Linker flags
-```makefile
-LDFLAGS += -L/path/to/terark-zip-rocksdb-lib
-LDFLAGS += -lterark-zip-rocksdb-r # trial version: -lterark-zip-rocksdb-trial-r
-LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
-```
-
-- C++ code
-
-```c++
-#include <table/terark_zip_table.h>
-/// other includes...
-
-  ///....
-  TerarkZipTableOptions opt;
-
-  /// TerarkZipTable needs to create temp files during compression
-  opt.localTempDir = "/path/to/some/temp/dir"; // default is "/tmp"
-
-  /// 0 : check sum nothing
-  /// 1 : check sum meta data and index, check on file load
-  /// 2 : check sum all data, not check on file load, checksum is for
-  ///     each record, this incurs 4 bytes overhead for each record
-  /// 3 : check sum all data with one checksum value, not checksum each record,
-  ///     if checksum doesn't match, load will fail
-  opt.checksumLevel = 3; // default 1
-
-  ///    < 0 : only last level using terarkZip
-  ///          this is equivalent to terarkZipMinLevel == num_levels-1
-  /// others : use terarkZip when curlevel >= terarkZipMinLevel
-  ///          this includes the two special cases:
-  ///                   == 0 : all levels using terarkZip
-  ///          >= num_levels : all levels using fallback TableFactory
-  /// it shown that set terarkZipMinLevel = 0 is the best choice
-  /// if mixed with rocksdb's native SST, those SSTs may using too much
-  /// memory & SSD, which degrades the performance
-  opt.terarkZipMinLevel = 0; // default
-
-  /// optional
-  opt.softZipWorkingMemLimit = 16ull << 30; // default
-  opt.hardZipWorkingMemLimit = 32ull << 30; // default
-
-  /// to let rocksdb compaction algo know the estimate SST file size
-  opt.estimateCompressionRatio = 0.2;
-
-  /// the global dictionary size over all value size
-  opt.sampleRatio = 0.03;
- 
-  /// other opt are tricky, just use default
-
-  /// rocksdb options when using terark-zip-rocksdb:
-
-  /// fallback can be NULL
-  auto fallback = NewBlockBasedTableFactory(); // or NewAdaptiveTableFactory();
-  auto factory = NewTerarkZipTableFactory(opt, fallback);
-  options.table_factory.reset(factory);
-
-  /// terark-zip use mmap
-  options.allow_mmap_reads = true;
-
-  /// universal compaction reduce write amplification and is more friendly for
-  /// large SST file, terark SST is better on larger SST file.
-  /// although universal compaction needs 2x SSD space on worst case, but
-  /// with terark-zip's high compression, the used SSD space is much smaller
-  /// than rocksdb's block compression schema
-  options.compaction_style = rocksdb::kCompactionStyleUniversal;
-
-  /// larger MemTable yield larger level0 SST file
-  /// larger SST file make terark-zip better
-  options.write_buffer_size     =  1ull << 30; // 1G
-  options.target_file_size_base =  1ull << 30; // 1G
-
-  /// single sst file size on greater levels should be larger
-  /// sstfile_size(level[n+1]) = sstfile_size(level[n]) * target_file_size_multiplier
-  options.target_file_size_multiplier = 2; // can be larger, such as 3,5,10
-
-  /// turn off rocksdb write slowdown, optional. If write slowdown is enabled
-  /// and write was really slow down, you may doubt that terark-zip caused it
-  options.level0_slowdown_writes_trigger = INT_MAX;
-  options.level0_stop_writes_trigger = INT_MAX;
-  options.soft_pending_compaction_bytes_limit = 0;
-  options.hard_pending_compaction_bytes_limit = 0;
-```
-
+[TerocksDB Documentation](https://github.com/Terark/terark-zip-rocksdb/wiki)
