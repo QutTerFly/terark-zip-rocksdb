@@ -10,9 +10,9 @@ We forked RocksDB and made a few changes, here is [Terark modified RocksDB](http
 
 Our changes for RocksDB does not change any RocksDB API, and does not incurred any extra dependencies, say, Terark modified RocksDB does not depend on TerarkZipTable. Our changes includes:
 
-  1. Add optional two pass scan on SSTable build, existing SSTable is not impacted.
-  
-  2. Add [TerarkZipTable config by env var](), this change using functions in libterark-zip-table as weak symbol, this is why it does not depends on TerarkZipTable.
+  1.  Add optional two pass scan on SSTable build, existing SSTable is not impacted.
+
+  2.  Add [TerarkZipTable config by env var](), this change using functions in libterark-zip-table as weak symbol, this is why it does not depends on TerarkZipTable.
 
 ## TerarkZipTable
 
