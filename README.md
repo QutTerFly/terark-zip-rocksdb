@@ -14,7 +14,7 @@ Our changes for RocksDB does not change any RocksDB API, and does not incurred a
 
 -  Add [TerarkZipTable config by env var](), this change using functions in libterark-zip-table as weak symbol, this is why it does not depends on TerarkZipTable.
 
-## 1. TerarkZipTable
+## 2. TerarkZipTable
 
 TerarkZipTable is an SSTable implementation using  &copy;&trade;Terark algorithms for RocksDB. It must work with [Terark modified RocksDB](http://github/rockeet/rocksdb).
 
