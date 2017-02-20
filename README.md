@@ -12,7 +12,7 @@ TerarkZipTable(this repository) is an SSTable implementation using  &copy;&trade
 
 We forked RocksDB and made a few changes, here is [Terark modified RocksDB](http://github/rockeet/rocksdb).
 
-Our changes for RocksDB does not change any RocksDB API, and does not incurred any extra dependencies, say, Terark modified RocksDB does not depend on TerarkZipTable. Our changes includes:
+Our changes for RocksDB does not change any RocksDB API, and does not have any extra dependencies, say, Terark modified RocksDB does not depend on TerarkZipTable. Our changes includes:
 
 -  Add optional two pass scan on SSTable build, existing SSTable is not impacted.
 
