@@ -1,6 +1,6 @@
 # TerocksDB 
 
-TerocksDB is a core product of [Terark](http://terark.com). It is a RocksDB distribution that powered by &copy;Terark&trade; algorithms. with these algorithms, TerocksDB is able to store more data and access much faster than official RocksDB(3+X more data and 10+X faster) on same hardware.
+TerocksDB is a core product of [Terark](http://terark.com). It is a RocksDB distribution that powered by &copy;&trade;Terark algorithms. with these algorithms, TerocksDB is able to store more data and access much faster than official RocksDB(3+X more data and 10+X faster) on same hardware.
 
 TerocksDB is completely compatible(binary compatible) with official RocksDB, TerocksDB has two components:
 
@@ -16,7 +16,7 @@ Our changes for RocksDB does not change any RocksDB API, and does not incurred a
 
 ## TerarkZipTable
 
-TerarkZipTable is an SSTable implementation using  &copy;Terark&trade; algorithms for RocksDB. It must work with [Terark modified RocksDB](http://github/rockeet/rocksdb).
+TerarkZipTable is an SSTable implementation using  &copy;&trade;Terark algorithms for RocksDB. It must work with [Terark modified RocksDB](http://github/rockeet/rocksdb).
 
 # License
 This software is open source, you can read the source code,
