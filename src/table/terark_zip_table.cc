@@ -202,6 +202,7 @@ private:
 
 class Uint32Histogram {
   terark::valvec<uint32_t> m_small_cnt;
+  terark::valvec<std::pair<uint32_t, uint32_t> > m_large_cnt_compact;
   terark::gold_hash_map<uint32_t, uint32_t> m_large_cnt;
   static const size_t MAX_SMALL_VALUE = 4096;
 
@@ -259,6 +260,17 @@ public:
     distinct_cnt += m_large_cnt.size();
     m_distinct_key_cnt = distinct_cnt;
     m_cnt_sum = sum;
+
+    m_large_cnt_compact.resize_no_init(m_large_cnt.size());
+    auto large_beg = m_large_cnt_compact.begin();
+    auto large_num = m_large_cnt.end_i();
+    for(size_t idx = 0; idx < large_num; ++idx) {
+      uint32_t key = m_large_cnt.key(idx);
+      uint32_t val = m_large_cnt.val(idx);
+      large_beg[idx] = std::make_pair(key, val);
+    }
+    std::sort(large_beg, large_beg + large_num);
+    m_large_cnt_compact.risk_set_size(large_num);
   }
   template<class OP>
   void for_each(OP op) const {
@@ -268,15 +280,7 @@ public:
         op(uint32_t(key), pCnt[key]);
       }
     }
-    valvec<std::pair<uint32_t, uint32_t> >
-    large(m_large_cnt.size(), valvec_no_init());
-    for (size_t idx = m_large_cnt.beg_i(); idx < m_large_cnt.end_i(); ++idx) {
-      uint32_t key = m_large_cnt.key(idx);
-      uint32_t val = m_large_cnt.val(idx);
-      large[idx] = std::make_pair(key, val);
-    }
-    std::sort(large.begin(), large.end());
-    for (auto kv : large) {
+    for (auto kv : m_large_cnt_compact) {
       op(kv.first, kv.second);
     }
   }
@@ -312,7 +316,8 @@ private:
   Status ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex);
   void BuilderWriteValues(std::function<void(fstring val)> write);
   Status WriteSSTFile(long long t3, long long t4
-      , fstring tmpIndexFile, DictZipBlobStore* zstore
+      , fstring tmpIndexFile, terark::BlobStore* zstore
+      , fstring dictMem
       , const DictZipBlobStore::ZipStat& dzstat);
   Status WriteMetaData(std::initializer_list<std::pair<const std::string*, BlockHandle> > blocks);
   DictZipBlobStore::ZipBuilder* createZipBuilder() const;
@@ -773,7 +778,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     }
   }
   if (tzto_.warmUpValueOnOpen) {
-    MmapWarmUp(valstore_->get_data());
+    MmapWarmUp(valstore_->get_mmap());
   }
   long long t1 = g_pf.now();
   keyIndex_->BuildCache(tzto_.indexCacheRatio);
@@ -1276,7 +1281,8 @@ ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
   // wait for indexing complete, if indexing is slower than value compressing
   waitIndex();
 
-  return WriteSSTFile(t3, t4, tmpIndexFile, zstore.get(), dzstat);
+  fstring dictMem = zstore->get_dict();
+  return WriteSSTFile(t3, t4, tmpIndexFile, zstore.get(), dictMem, dzstat);
 }
 
 void
@@ -1408,10 +1414,11 @@ TerarkZipTableBuilder::BuilderWriteValues(std::function<void(fstring)> write) {
 }
 
 Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
-    , fstring tmpIndexFile, DictZipBlobStore* zstore
+    , fstring tmpIndexFile, terark::BlobStore* zstore
+    , fstring dictMem
     , const DictZipBlobStore::ZipStat& dzstat)
 {
-  const size_t realsampleLenSum = zstore->get_dict().size();
+  const size_t realsampleLenSum = dictMem.size();
   long long rawBytes = properties_.raw_key_size + properties_.raw_value_size;
   long long t5 = g_pf.now();
 	unique_ptr<TerocksIndex> index(TerocksIndex::LoadFile(tmpIndexFile));
@@ -1454,13 +1461,14 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 		t7 = g_pf.now();
 		try {
 		  dataBlock.set_offset(offset_);
-		  zstore->reorder_zip_data(newToOld, [&](const void* data, size_t size) {
+		  auto writeAppend = [&](const void* data, size_t size) {
 		    s = file_->Append(Slice((const char*)data, size));
 		    if (!s.ok()) {
 		      throw s;
 		    }
 		    offset_ += size;
-		  });
+		  };
+		  zstore->reorder_zip_data(newToOld, std::ref(writeAppend));
 		  dataBlock.set_size(offset_ - dataBlock.offset());
 		} catch (const Status&) {
 		  return s;
@@ -1470,12 +1478,12 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 	}
   else {
     t7 = t6 = t5;
-    WriteBlock(zstore->get_data(), file_, &offset_, &dataBlock);
+    WriteBlock(zstore->get_mmap(), file_, &offset_, &dataBlock);
   }
   fstring commonPrefix(prevUserKey_.data(), keyStat_.commonPrefixLen);
   WriteBlock(commonPrefix, file_, &offset_, &commonPrefixBlock);
 	properties_.data_size = dataBlock.size();
-	s = WriteBlock(zstore->get_dict(), file_, &offset_, &dictBlock);
+	s = WriteBlock(dictMem, file_, &offset_, &dictBlock);
 	if (!s.ok()) {
 		return s;
 	}
@@ -1491,7 +1499,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 	index.reset();
 	properties_.index_size = indexBlock.size();
 	WriteMetaData({
-    {&kTerarkZipTableValueDictBlock   , dictBlock},
+    {dictMem.size() ? &kTerarkZipTableValueDictBlock : NULL, dictBlock},
     {&kTerarkZipTableIndexBlock       , indexBlock},
     {&kTerarkZipTableValueTypeBlock   , zvTypeBlock},
     {&kTerarkZipTableCommonPrefixBlock, commonPrefixBlock},
@@ -1583,7 +1591,9 @@ R"EOS(TerarkZipTableBuilder::Finish():this=%p: second pass time =%7.2f's, %8.3f'
 Status TerarkZipTableBuilder::WriteMetaData(std::initializer_list<std::pair<const std::string*, BlockHandle> > blocks) {
   MetaIndexBuilder metaindexBuiler;
   for (const auto& block : blocks) {
-    metaindexBuiler.Add(*block.first, block.second);
+    if (block.first) {
+      metaindexBuiler.Add(*block.first, block.second);
+    }
   }
   PropertyBlockBuilder propBlockBuilder;
   propBlockBuilder.AddTableProperty(properties_);
@@ -1642,7 +1652,8 @@ Status TerarkZipTableBuilder::OfflineFinish() {
       , "TerarkZipTableBuilder::Finish():this=%p:  index pass time =%7.2f's, %8.3f'MB/sec\n"
       , this, g_pf.sf(t1,tt), properties_.raw_key_size*1.0/g_pf.uf(t1,tt)
       );
-  return WriteSSTFile(t1, tt, tmpIndexFile, zstore.get(), dzstat);
+  fstring dictMem = zstore->get_dict();
+  return WriteSSTFile(t1, tt, tmpIndexFile, zstore.get(), dictMem, dzstat);
 }
 
 void TerarkZipTableBuilder::Abandon() {
@@ -1724,12 +1735,27 @@ void TerarkZipTableBuilder::UpdateValueLenHistogram() {
 
 /////////////////////////////////////////////////////////////////////////////
 
+TableFactory*
+__attribute__((weak))
+NewAdaptiveTableFactory(
+    std::shared_ptr<TableFactory> table_factory_to_write,
+    std::shared_ptr<TableFactory> block_based_table_factory,
+    std::shared_ptr<TableFactory> plain_table_factory,
+    std::shared_ptr<TableFactory> cuckoo_table_factory);
+
 class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
  public:
   explicit
   TerarkZipTableFactory(const TerarkZipTableOptions& tzto, TableFactory* fallback)
   : table_options_(tzto), fallback_factory_(fallback) {
-    adaptive_factory_ = NewAdaptiveTableFactory();
+    if (NewAdaptiveTableFactory) {
+      adaptive_factory_ = NewAdaptiveTableFactory();
+    } else {
+      adaptive_factory_ = fallback;
+      STD_WARN("Missing Symbol NewAdaptiveTableFactory(), "
+               "use fallback factory as adaptive_factory_, "
+               "may not recognize rocksdb SSTables\n");
+    }
   }
 
   const char* Name() const override { return "TerarkZipTable"; }
