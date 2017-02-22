@@ -86,6 +86,8 @@ endif
 
 ifeq (${WITH_BMI2},1)
 	CPU += -mbmi -mbmi2
+else
+	CPU += -mno-bmi -mno-bmi2
 endif
 
 COMMON_C_FLAGS  += -Wformat=2 -Wcomment
