@@ -99,7 +99,7 @@ struct ZipValueMultiValue {
 	  assert(num > 0);
 	  memmove(me->offsets, me->offsets+1, sizeof(uint32_t)*(num-1));
 	  me->offsets[0] = 0;
-	  me->offsets[num] = size - sizeof(uint32_t)*num;
+	  me->offsets[num] = size - sizeof(uint32_t)*(num + 1);
 	  *pNum = num;
 	  return me;
 	}
