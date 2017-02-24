@@ -15,8 +15,8 @@ COMPILER := $(shell ${CXX} tools/configure/compiler.cpp -o ${tmpfile}.exe && ./$
 #$(error COMPILER=${COMPILER})
 UNAME_MachineSystem := $(shell uname -m -s | sed 's:[ /]:-:g')
 TerarkLibDir := ../terark/build/${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}/lib
-BUILD_NAME := ${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}${TERARK_ZIP_TRIAL_VERSION}
-BUILD_ROOT := build/${BUILD_NAME}
+BUILD_NAME := ${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}
+BUILD_ROOT := build/${BUILD_NAME}${TERARK_ZIP_TRIAL_VERSION}
 ddir:=${BUILD_ROOT}/dbg
 rdir:=${BUILD_ROOT}/rls
 
@@ -86,6 +86,8 @@ endif
 
 ifeq (${WITH_BMI2},1)
 	CPU += -mbmi -mbmi2
+else
+	CPU += -mno-bmi -mno-bmi2
 endif
 
 COMMON_C_FLAGS  += -Wformat=2 -Wcomment
@@ -235,7 +237,8 @@ ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
-                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r}
+                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r} \
+                $(wildcard ${TerarkLibDir}/libterark-*)
 	rm -rf ${TarBall}
 	mkdir -p ${TarBall}/lib
 	mkdir -p ${TarBall}/bin
