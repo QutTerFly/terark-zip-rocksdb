@@ -237,7 +237,8 @@ ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
-                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r}
+                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r} \
+                $(wildcard ${TerarkLibDir}/libterark-*)
 	rm -rf ${TarBall}
 	mkdir -p ${TarBall}/lib
 	mkdir -p ${TarBall}/bin
