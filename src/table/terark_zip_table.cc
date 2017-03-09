@@ -33,9 +33,13 @@
 #include <float.h>
 #include <util/arena.h> // for #include <sys/mman.h>
 
+#ifdef _MSC_VER
+# include <io.h>
+#endif
 
 namespace rocksdb {
 
+using terark::BlobStore;
 using terark::DictZipBlobStore;
 using terark::SortableStrVec;
 using terark::bitfield_array;
@@ -186,7 +190,7 @@ public:
   Status Open(RandomAccessFileReader* file, uint64_t file_size);
 
 private:
-  unique_ptr<DictZipBlobStore> valstore_;
+  unique_ptr<BlobStore> valstore_;
   unique_ptr<TerocksIndex> keyIndex_;
   Slice commonPrefix_;
   bitfield_array<2> typeArray_;
@@ -759,10 +763,9 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
         , s.ToString().c_str());
   }
   try {
-	  valstore_.reset(new DictZipBlobStore());
-	  valstore_->load_user_memory(
-			  fstringOf(valueDictBlock.data),
-			  fstring(file_data.data(), props->data_size));
+	  valstore_.reset(BlobStore::load_from_user_memory(
+        fstring(file_data.data(), props->data_size),
+			  fstringOf(valueDictBlock.data)));
   }
   catch (const BadCrc32cException& ex) {
 	  return Status::Corruption("TerarkZipTableReader::Open()", ex.what());
@@ -778,7 +781,9 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     MmapWarmUp(fstringOf(indexBlock.data));
     if (!tzto_.warmUpValueOnOpen) {
       MmapWarmUp(valstore_->get_dict());
-      MmapWarmUp(valstore_->get_index());
+      for (auto block : valstore_->get_index_blocks()) {
+        MmapWarmUp(block);
+      }
     }
   }
   if (tzto_.warmUpValueOnOpen) {
@@ -928,6 +933,15 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   file_ = file;
   sampleUpperBound_ = randomGenerator_.max() * table_options_.sampleRatio;
   tmpValueFile_.path = tzto.localTempDir + "/Terocks-XXXXXX";
+#if _MSC_VER
+  int err = _mktemp_s(&tmpValueFile_.path[0], tmpValueFile_.path.size() + 1);
+  if (err) {
+    fprintf(stderr
+      , "ERROR: _mktemp_s(%s) failed with: %s, so we may use large memory\n"
+      , tmpValueFile_.path.c_str(), strerror(err));
+  }
+  tmpValueFile_.open();
+#else
   int fd = mkstemp(&tmpValueFile_.path[0]);
   if (fd < 0) {
     int err = errno;
@@ -936,6 +950,7 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
         , tmpValueFile_.path.c_str(), strerror(err));
   }
   tmpValueFile_.dopen(fd);
+#endif
   tmpKeyFile_.path = tmpValueFile_.path + ".keydata";
   tmpKeyFile_.open();
   tmpSampleFile_.path = tmpValueFile_.path + ".sample";
@@ -1739,6 +1754,7 @@ void TerarkZipTableBuilder::UpdateValueLenHistogram() {
 
 /////////////////////////////////////////////////////////////////////////////
 
+#ifndef _MSC_VER
 TableFactory*
 __attribute__((weak))
 NewAdaptiveTableFactory(
@@ -1746,12 +1762,16 @@ NewAdaptiveTableFactory(
     std::shared_ptr<TableFactory> block_based_table_factory,
     std::shared_ptr<TableFactory> plain_table_factory,
     std::shared_ptr<TableFactory> cuckoo_table_factory);
+#endif
 
 class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
  public:
   explicit
   TerarkZipTableFactory(const TerarkZipTableOptions& tzto, TableFactory* fallback)
   : table_options_(tzto), fallback_factory_(fallback) {
+#ifdef _MSC_VER
+    adaptive_factory_ = fallback;
+#else
     if (NewAdaptiveTableFactory) {
       adaptive_factory_ = NewAdaptiveTableFactory();
     } else {
@@ -1760,6 +1780,7 @@ class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
                "use fallback factory as adaptive_factory_, "
                "may not recognize rocksdb SSTables\n");
     }
+#endif
   }
 
   const char* Name() const override { return "TerarkZipTable"; }

@@ -6,7 +6,12 @@
 #include <rocksdb/options.h>
 #include <rocksdb/table.h>
 #include <rocksdb/env.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+# include <Windows.h>
+# define strcasecmp _stricmp
+#else
+# cinclude <unistd.h>
+#endif
 
 namespace rocksdb {
 
@@ -16,9 +21,16 @@ void TerarkZipAutoConfigForBulkLoad(struct TerarkZipTableOptions& tzo,
                                     size_t memBytesLimit)
 {
   if (0 == memBytesLimit) {
+#ifdef _MSC_VER
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    GlobalMemoryStatusEx(&statex);
+    memBytesLimit = statex.ullTotalPhys;
+#else
     size_t page_num  = sysconf(_SC_PHYS_PAGES);
     size_t page_size = sysconf(_SC_PAGE_SIZE);
     memBytesLimit = page_num * page_size;
+#endif
   }
   tzo.softZipWorkingMemLimit = memBytesLimit * 7 / 8;
   tzo.hardZipWorkingMemLimit = tzo.softZipWorkingMemLimit;
@@ -58,9 +70,16 @@ void TerarkZipAutoConfigForOnlineDB(struct TerarkZipTableOptions& tzo,
                                     size_t memBytesLimit)
 {
   if (0 == memBytesLimit) {
-    size_t page_num  = sysconf(_SC_PHYS_PAGES);
+#ifdef _MSC_VER
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    GlobalMemoryStatusEx(&statex);
+    memBytesLimit = statex.ullTotalPhys;
+#else
+    size_t page_num = sysconf(_SC_PHYS_PAGES);
     size_t page_size = sysconf(_SC_PAGE_SIZE);
     memBytesLimit = page_num * page_size;
+#endif
   }
   tzo.softZipWorkingMemLimit = memBytesLimit * 1 / 8;
   tzo.hardZipWorkingMemLimit = tzo.softZipWorkingMemLimit * 2;
@@ -156,12 +175,15 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
 
   cfo.table_factory.reset(NewTerarkZipTableFactory(tzo, NewAdaptiveTableFactory()));
   const char* compaction_style = "Universal";
+#ifndef _MSC_VER
   if (const char* env = getenv("TerarkZipTable_compaction_style")) {
     compaction_style = env;
   }
+#endif
   if (strcasecmp(compaction_style, "Level") == 0) {
     cfo.compaction_style = kCompactionStyleLevel;
-  } else {
+  }
+  else {
     if (strcasecmp(compaction_style, "Universal") != 0) {
       STD_WARN(
         "bad env TerarkZipTable_compaction_style=%s, use default 'universal'",
