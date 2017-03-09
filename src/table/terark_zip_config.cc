@@ -10,7 +10,7 @@
 # include <Windows.h>
 # define strcasecmp _stricmp
 #else
-# cinclude <unistd.h>
+# include <unistd.h>
 #endif
 
 namespace rocksdb {
