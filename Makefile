@@ -238,7 +238,7 @@ ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	scp -P 22    $< root@nark.cc:/var/www/html/download/
 	touch $@
 ${TarBall}.tgz.oss.done: ${TarBall}.tgz
-	ossutil cp   $< oss://terark-downloads/terarkdb/$(notdir $<)
+	ossutil cp   $< oss://terark-downloads/terarkdb/$(notdir $<) -f
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
