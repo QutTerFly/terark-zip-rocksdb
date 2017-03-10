@@ -228,12 +228,17 @@ ${TerarkZipRocks_r} : $(call objs,TerarkZipRocks,r)
 ${static_TerarkZipRocks_d} : $(call objs,TerarkZipRocks,d)
 ${static_TerarkZipRocks_r} : $(call objs,TerarkZipRocks,r)
 
+TarBallBaseName := ${TerarkZipRocks_lib}-${BUILD_NAME}
 TarBall := pkg/${TerarkZipRocks_lib}-${BUILD_NAME}
 .PHONY : pkg
 pkg : ${TarBall}.tgz
 scp : ${TarBall}.tgz.scp.done
+oss : ${TarBall}.tgz.oss.done
 ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	scp -P 22    $< root@nark.cc:/var/www/html/download/
+	touch $@
+${TarBall}.tgz.oss.done: ${TarBall}.tgz
+	ossutil cp   $< oss://terark-downloads/terarkdb/$(notdir $<) -f
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
@@ -278,10 +283,10 @@ endif
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
-	cp src/table/*.h           ${TarBall}/include/table
+	cp src/table/terark_zip_table.h           ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
-	tar czf ${TarBall}.tgz ${TarBall}
+	cd pkg; tar czf ${TarBallBaseName}.tgz ${TarBallBaseName}
 
 %${DLL_SUFFIX}:
 	@echo "----------------------------------------------------------------------------------"
@@ -325,11 +330,11 @@ depends : ${alldep}
 
 ${ddir}/%.exe: ${ddir}/%.o
 	@echo Linking ... $@
-	${LD} ${LDFLAGS} -o $@ $< -Llib -lterark-db-${COMPILER}-d -L../terark/lib -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d ${LIBS}
+	${LD} ${LDFLAGS} -o $@ $< -L${BUILD_ROOT}/lib -L${TerarkLibDir}/lib -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d ${LIBS}
 
 ${rdir}/%.exe: ${ddir}/%.o
 	@echo Linking ... $@
-	${LD} ${LDFLAGS} -o $@ $< -Llib -lterark-db-${COMPILER}-r -L../terark/lib -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r ${LIBS}
+	${LD} ${LDFLAGS} -o $@ $< -L${BUILD_ROOT}/lib -L${TerarkLibDir}/lib -lterark-zbs-${COMPILER}-r -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r ${LIBS}
 
 ${ddir}/%.o: %.cpp
 	@echo file: $< "->" $@
