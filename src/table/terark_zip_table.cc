@@ -32,14 +32,13 @@
 #include <stdint.h>
 #include <float.h>
 #include <util/arena.h> // for #include <sys/mman.h>
-
 #ifdef _MSC_VER
 # include <io.h>
 #endif
 
+
 namespace rocksdb {
 
-using terark::BlobStore;
 using terark::DictZipBlobStore;
 using terark::SortableStrVec;
 using terark::bitfield_array;
@@ -172,6 +171,9 @@ public:
   InternalIterator*
   NewIterator(const ReadOptions&, Arena*, bool skip_filters) override;
 
+  InternalIterator*
+  NewRangeTombstoneIterator(const ReadOptions& read_options) override;
+
   void Prepare(const Slice& target) override {}
 
   Status Get(const ReadOptions&, const Slice& key, GetContext*,
@@ -190,7 +192,7 @@ public:
   Status Open(RandomAccessFileReader* file, uint64_t file_size);
 
 private:
-  unique_ptr<BlobStore> valstore_;
+  unique_ptr<terark::BlobStore> valstore_;
   unique_ptr<TerocksIndex> keyIndex_;
   Slice commonPrefix_;
   bitfield_array<2> typeArray_;
@@ -200,6 +202,7 @@ private:
   const TableReaderOptions table_reader_options_;
   std::shared_ptr<const TableProperties> table_properties_;
   const TerarkZipTableOptions& tzto_;
+  terark::fstrvec tombstones_;
   bool isReverseBytewiseOrder_;
   friend class TerarkZipTableIterator;
   Status LoadIndex(Slice mem);
@@ -763,9 +766,10 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
         , s.ToString().c_str());
   }
   try {
-	  valstore_.reset(BlobStore::load_from_user_memory(
+	  valstore_.reset(terark::BlobStore::load_from_user_memory(
         fstring(file_data.data(), props->data_size),
-			  fstringOf(valueDictBlock.data)));
+        fstringOf(valueDictBlock.data)
+	      ));
   }
   catch (const BadCrc32cException& ex) {
 	  return Status::Corruption("TerarkZipTableReader::Open()", ex.what());
@@ -781,7 +785,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     MmapWarmUp(fstringOf(indexBlock.data));
     if (!tzto_.warmUpValueOnOpen) {
       MmapWarmUp(valstore_->get_dict());
-      for (auto block : valstore_->get_index_blocks()) {
+      for (fstring block : valstore_->get_index_blocks()) {
         MmapWarmUp(block);
       }
     }
@@ -829,6 +833,97 @@ NewIterator(const ReadOptions& ro, Arena* arena, bool skip_filters) {
 	else {
 		return new TerarkZipTableIterator(this);
 	}
+}
+
+// TODO: need to use Internal Key Compare
+class TZT_RangeTombstoneIter : public InternalIterator, boost::noncopyable {
+  const terark::fstrvec* tombstones_;
+  const bool isReverseBytewiseOrder_;
+  intptr_t num_;
+  intptr_t idx_;
+public:
+  TZT_RangeTombstoneIter(const terark::fstrvec* tombstones, bool isReverse)
+    : tombstones_(tombstones)
+    , isReverseBytewiseOrder_(isReverse)
+    , num_(tombstones->size()), idx_(-1) {}
+  ~TZT_RangeTombstoneIter() {}
+  void SetPinnedItersMgr(PinnedIteratorsManager*) {}
+  bool Valid() const override {
+    if (isReverseBytewiseOrder_)
+      return idx_ >= 0;
+    else
+      return idx_ < num_;
+  }
+  void SeekToFirst() override {
+    if (isReverseBytewiseOrder_)
+      idx_ = num_ - 1;
+    else
+      idx_ = 0;
+  }
+  void SeekToLast() override {
+    if (isReverseBytewiseOrder_)
+      idx_ = 0;
+    else
+      idx_ = num_ - 1;
+  }
+  void SeekForPrev(const Slice& key) override {
+    idx_ = terark::lower_bound_0<const terark::fstrvec&>(
+        *tombstones_, num_, fstringOf(key));
+    if (!isReverseBytewiseOrder_) {
+      if (idx_ < num_ && fstringOf(key) != (*tombstones_)[idx_]) {
+        idx_++;
+      }
+    }
+  }
+  void Seek(const Slice& key) override {
+    idx_ = terark::lower_bound_0<const terark::fstrvec&>(
+        *tombstones_, num_, fstringOf(key));
+    if (isReverseBytewiseOrder_) {
+      if (idx_ < num_ && fstringOf(key) != (*tombstones_)[idx_]) {
+        idx_--;
+      }
+    }
+  }
+  void Next() override {
+    if (isReverseBytewiseOrder_) {
+      assert(idx_ >= 0);
+      idx_--;
+    }
+    else {
+      assert(idx_ < num_);
+      idx_++;
+    }
+  }
+  void Prev() override {
+    if (!isReverseBytewiseOrder_) {
+      assert(idx_ >= 0);
+      idx_--;
+    }
+    else {
+      assert(idx_ < num_);
+      idx_++;
+    }
+  }
+  Slice key() const override {
+    assert(idx_ >= 0);
+    assert(idx_ < num_);
+    auto pp = (*tombstones_)[idx_];
+    return Slice(pp.first, pp.second - pp.first);
+  }
+  Slice value() const override {
+    assert(idx_ >= 0);
+    assert(idx_ < num_);
+    return Slice();
+  }
+  Status status() const override { return Status::OK(); }
+  bool IsKeyPinned() const override { return true; }
+  bool IsValuePinned() const override { return true; }
+};
+
+InternalIterator*
+TerarkZipTableReader::
+NewRangeTombstoneIterator(const ReadOptions& read_options) {
+  return new TZT_RangeTombstoneIter(&tombstones_, isReverseBytewiseOrder_);
 }
 
 Status
@@ -934,8 +1029,7 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   sampleUpperBound_ = randomGenerator_.max() * table_options_.sampleRatio;
   tmpValueFile_.path = tzto.localTempDir + "/Terocks-XXXXXX";
 #if _MSC_VER
-  int err = _mktemp_s(&tmpValueFile_.path[0], tmpValueFile_.path.size() + 1);
-  if (err) {
+  if (int err = _mktemp_s(&tmpValueFile_.path[0], tmpValueFile_.path.size() + 1)) {
     fprintf(stderr
       , "ERROR: _mktemp_s(%s) failed with: %s, so we may use large memory\n"
       , tmpValueFile_.path.c_str(), strerror(err));
@@ -1754,33 +1848,12 @@ void TerarkZipTableBuilder::UpdateValueLenHistogram() {
 
 /////////////////////////////////////////////////////////////////////////////
 
-#ifndef _MSC_VER
-TableFactory*
-__attribute__((weak))
-NewAdaptiveTableFactory(
-    std::shared_ptr<TableFactory> table_factory_to_write,
-    std::shared_ptr<TableFactory> block_based_table_factory,
-    std::shared_ptr<TableFactory> plain_table_factory,
-    std::shared_ptr<TableFactory> cuckoo_table_factory);
-#endif
-
 class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
  public:
   explicit
   TerarkZipTableFactory(const TerarkZipTableOptions& tzto, TableFactory* fallback)
   : table_options_(tzto), fallback_factory_(fallback) {
-#ifdef _MSC_VER
-    adaptive_factory_ = fallback;
-#else
-    if (NewAdaptiveTableFactory) {
-      adaptive_factory_ = NewAdaptiveTableFactory();
-    } else {
-      adaptive_factory_ = fallback;
-      STD_WARN("Missing Symbol NewAdaptiveTableFactory(), "
-               "use fallback factory as adaptive_factory_, "
-               "may not recognize rocksdb SSTables\n");
-    }
-#endif
+    adaptive_factory_ = NewAdaptiveTableFactory();
   }
 
   const char* Name() const override { return "TerarkZipTable"; }
