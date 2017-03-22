@@ -11,6 +11,7 @@
 #include <rocksdb/comparator.h>
 #include <rocksdb/options.h>
 #include <rocksdb/table.h>
+#include <rocksdb/merge_operator.h>
 #include <table/get_context.h>
 #include <table/internal_iterator.h>
 #include <table/table_builder.h>
@@ -254,12 +255,14 @@ class Uint32Histogram {
   static const size_t MAX_SMALL_VALUE = 4096;
 
 public:
+  size_t m_totla_key_len;
   size_t m_distinct_key_cnt;
   size_t m_cnt_sum;
   size_t m_min_cnt_key, m_cnt_of_min_cnt_key;
   size_t m_max_cnt_key, m_cnt_of_max_cnt_key;
 
   Uint32Histogram() {
+    m_totla_key_len = 0;
     m_cnt_of_min_cnt_key = 0;
     m_cnt_of_max_cnt_key = 0;
     m_min_cnt_key = size_t(-1);
@@ -282,6 +285,7 @@ public:
         break;
       }
     }
+    size_t len = 0;
     size_t sum = 0;
     size_t distinct_cnt = 0;
     uint32_t cnt_of_max_cnt_key = 0;
@@ -289,6 +293,7 @@ public:
     for (size_t key = 0, maxKey = m_small_cnt.size(); key < maxKey; ++key) {
       uint32_t cnt = pCnt[key];
       if (cnt) {
+        len += cnt * key;
         distinct_cnt++;
         sum += cnt;
         if (cnt_of_max_cnt_key < cnt) {
@@ -301,6 +306,8 @@ public:
         }
       }
     }
+    m_cnt_of_min_cnt_key = cnt_of_min_cnt_key;
+    m_cnt_of_max_cnt_key = cnt_of_max_cnt_key;
     for (size_t idx = m_large_cnt.beg_i(); idx < m_large_cnt.end_i(); ++idx) {
       sum += m_large_cnt.val(idx);
     }
@@ -315,8 +322,10 @@ public:
       uint32_t key = m_large_cnt.key(idx);
       uint32_t val = m_large_cnt.val(idx);
       large_beg[idx] = std::make_pair(key, val);
+      len += key * key;
     }
     std::sort(large_beg, large_beg + large_num);
+    m_totla_key_len = len;
     m_large_cnt_compact.risk_set_size(large_num);
   }
   template<class OP>
@@ -822,9 +831,6 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   BlockContents commonPrefixBlock;
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
 		  kTerarkZipTableValueDictBlock, &valueDictBlock);
-  if (!s.ok()) {
-	  return s;
-  }
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
 		  kTerarkZipTableIndexBlock, &indexBlock);
   if (!s.ok()) {
@@ -1024,8 +1030,21 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   , ioptions_(tbo.ioptions)
   , range_del_block_(1)
 {
+  properties_.fixed_key_len = 0;
+  properties_.num_data_blocks = 1;
+  properties_.column_family_id = column_family_id;
+  properties_.column_family_name = tbo.column_family_name;
+  properties_.comparator_name = ioptions_.user_comparator ?
+    ioptions_.user_comparator->Name() : "nullptr";
+  properties_.merge_operator_name = ioptions_.merge_operator ?
+    ioptions_.merge_operator->Name() : "nullptr";
+  properties_.compression_name = CompressionTypeToString(tbo.compression_type);
+  properties_.prefix_extractor_name = ioptions_.prefix_extractor ?
+    ioptions_.prefix_extractor->Name() : "nullptr";
+
   isReverseBytewiseOrder_ =
-    fstring(ioptions_.user_comparator->Name()).startsWith("rev:");
+    fstring(properties_.comparator_name).startsWith("rev:");
+
   if (tbo.int_tbl_prop_collector_factories) {
     const auto& factories = *tbo.int_tbl_prop_collector_factories;
     collectors_.resize(factories.size());
@@ -1034,6 +1053,18 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
       collectors_[i].reset(factories[i]->CreateIntTblPropCollector(cfId));
     }
   }
+
+  std::string property_collectors_names = "[";
+  for (size_t i = 0;
+    i < ioptions_.table_properties_collector_factories.size(); ++i) {
+    if (i != 0) {
+      property_collectors_names += ",";
+    }
+    property_collectors_names +=
+      ioptions_.table_properties_collector_factories[i]->Name();
+  }
+  property_collectors_names += "]";
+  properties_.property_collectors_names = property_collectors_names;
 
   file_ = file;
   sampleUpperBound_ = randomGenerator_.max() * table_options_.sampleRatio;
@@ -1062,11 +1093,6 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   if (table_options_.debugLevel == 3) {
     tmpDumpFile_.open(tmpValueFile_.path + ".dump", "wb+");
   }
-
-  properties_.fixed_key_len = 0;
-  properties_.num_data_blocks = 1;
-  properties_.column_family_id = column_family_id;
-  properties_.column_family_name = tbo.column_family_name;
 
   if (tzto.isOfflineBuild) {
     if (tbo.compression_dict && tbo.compression_dict->size()) {
@@ -1141,6 +1167,7 @@ static size_t g_sumEntryNum = 0;
 static long long g_lastTime = g_pf.now();
 
 void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
+
   if (table_options_.debugLevel == 3) {
     rocksdb::ParsedInternalKey ikey;
     rocksdb::ParseInternalKey(key, &ikey);
