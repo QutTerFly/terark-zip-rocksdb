@@ -16,6 +16,7 @@
 #include <table/internal_iterator.h>
 #include <table/table_builder.h>
 #include <table/table_reader.h>
+#include <table/sst_file_writer_collectors.h>
 #include <table/block.h>
 #include <table/meta_blocks.h>
 #include <terark/bitmap.hpp>
@@ -46,7 +47,7 @@
 void DEBUG_PRINT_KEY(const char* first_or_second, rocksdb::Slice key) {
   rocksdb::ParsedInternalKey ikey;
   rocksdb::ParseInternalKey(key, &ikey);
-  fprintf(stderr, "DEBUG: %s pass -> %s \n", first_or_second, ikey.DebugString(true).c_str());
+  fprintf(stderr, "DEBUG: %s pass -> %s\n", first_or_second, ikey.DebugString(true).c_str());
 }
 
 #define DEBUG_PRINT_1ST_PASS_KEY(key) DEBUG_PRINT_KEY("1st", key);
@@ -61,7 +62,54 @@ void DEBUG_PRINT_KEY(...){}
 
 #endif
 
+namespace {
+using namespace rocksdb;
 
+// copy & modify from block_based_table_reader.cc
+SequenceNumber GetGlobalSequenceNumber(const TableProperties& table_properties,
+                                       Logger* info_log) {
+  auto& props = table_properties.user_collected_properties;
+
+  auto version_pos = props.find(ExternalSstFilePropertyNames::kVersion);
+  auto seqno_pos = props.find(ExternalSstFilePropertyNames::kGlobalSeqno);
+
+  if (version_pos == props.end()) {
+    if (seqno_pos != props.end()) {
+      // This is not an external sst file, global_seqno is not supported.
+      assert(false);
+      fprintf(stderr,
+          "A non-external sst file have global seqno property with value %s\n",
+          seqno_pos->second.c_str());
+    }
+    return kDisableGlobalSequenceNumber;
+  }
+
+  uint32_t version = DecodeFixed32(version_pos->second.c_str());
+  if (version < 2) {
+    if (seqno_pos != props.end() || version != 1) {
+      // This is a v1 external sst file, global_seqno is not supported.
+      assert(false);
+      fprintf(stderr,
+          "An external sst file with version %u have global seqno property "
+          "with value %s\n",
+          version, seqno_pos->second.c_str());
+    }
+    return kDisableGlobalSequenceNumber;
+  }
+
+  SequenceNumber global_seqno = DecodeFixed64(seqno_pos->second.c_str());
+
+  if (global_seqno > kMaxSequenceNumber) {
+    assert(false);
+    fprintf(stderr,
+        "An external sst file with version %u have global seqno property "
+        "with value %llu, which is greater than kMaxSequenceNumber\n",
+        version, global_seqno);
+  }
+
+  return global_seqno;
+}
+}
 
 
 namespace rocksdb {
@@ -171,6 +219,7 @@ class TerarkEmptyTableReader : public TableReader, boost::noncopyable {
   };
   const TableReaderOptions table_reader_options_;
   std::shared_ptr<const TableProperties> table_properties_;
+  SequenceNumber global_seqno_;
   unique_ptr<Block> tombstone_;
   Slice  file_data_;
   unique_ptr<RandomAccessFileReader> file_;
@@ -182,7 +231,10 @@ public:
   InternalIterator*
   NewRangeTombstoneIterator(const ReadOptions& read_options) override {
     return tombstone_ ?
-      tombstone_->NewIterator(&table_reader_options_.internal_comparator) :
+      tombstone_->NewIterator(
+        &table_reader_options_.internal_comparator,
+        nullptr, true,
+        table_reader_options_.ioptions.statistics) :
       nullptr;
   }
   void Prepare(const Slice&) override {}
@@ -197,6 +249,7 @@ public:
   ~TerarkEmptyTableReader() {}
   TerarkEmptyTableReader(const TableReaderOptions& o)
     : table_reader_options_(o) {
+    global_seqno_ = SequenceNumber(-1);
   }
   Status Open(RandomAccessFileReader* file, uint64_t file_size);
 };
@@ -242,6 +295,7 @@ private:
   unique_ptr<RandomAccessFileReader> file_;
   const TableReaderOptions table_reader_options_;
   std::shared_ptr<const TableProperties> table_properties_;
+  SequenceNumber global_seqno_;
   const TerarkZipTableOptions& tzto_;
   bool isReverseBytewiseOrder_;
   friend class TerarkZipTableIterator;
@@ -441,11 +495,12 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   }
   file_data_ = file_data;
   table_properties_.reset(uniqueProps.release());
+  global_seqno_ = GetGlobalSequenceNumber(*table_properties_, ioptions.info_log);
   BlockContents tombstoneBlock;
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kRangeDelBlock, &tombstoneBlock);
   if (s.ok()) {
-    tombstone_.reset(new Block(std::move(tombstoneBlock), 0));
+    tombstone_.reset(new Block(std::move(tombstoneBlock), global_seqno_));
   }
   INFO(ioptions.info_log
     , "TerarkZipTableReader::Open(): fsize = %zd, entries = %zd keys = 0 indexSize = 0 valueSize = 0, warm up time =      0.000'sec, build cache time =      0.000'sec\n"
@@ -825,6 +880,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   }
   file_data_ = file_data;
   table_properties_.reset(uniqueProps.release());
+  global_seqno_ = GetGlobalSequenceNumber(*table_properties_, ioptions.info_log);
   isReverseBytewiseOrder_ =
       fstring(ioptions.user_comparator->Name()).startsWith("rev:");
   BlockContents valueDictBlock, indexBlock, zValueTypeBlock, tombstoneBlock;
@@ -844,7 +900,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kRangeDelBlock, &tombstoneBlock);
   if (s.ok()) {
-    tombstone_.reset(new Block(std::move(tombstoneBlock), 0));
+    tombstone_.reset(new Block(std::move(tombstoneBlock), global_seqno_));
   }
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
       kTerarkZipTableCommonPrefixBlock, &commonPrefixBlock);
@@ -933,7 +989,10 @@ InternalIterator*
 TerarkZipTableReader::
 NewRangeTombstoneIterator(const ReadOptions& read_options) {
   if (tombstone_) {
-    auto iter = tombstone_->NewIterator(&table_reader_options_.internal_comparator);
+    auto iter = tombstone_->NewIterator(
+      &table_reader_options_.internal_comparator,
+      nullptr, true,
+      table_reader_options_.ioptions.statistics);
     return iter;
   }
   return nullptr;
@@ -1248,7 +1307,7 @@ Status TerarkZipTableBuilder::EmptyTableFinish() {
   INFO(tbo_.ioptions.info_log
       , "TerarkZipTableBuilder::EmptyFinish():this=%p\n", this);
   offset_ = 0;
-  BlockHandle emptyTableBH, tombstoneBH;
+  BlockHandle emptyTableBH, tombstoneBH(0, 0);
   Status s = WriteBlock(Slice("Empty"), file_, &offset_, &emptyTableBH);
   if (!s.ok()) {
     return s;
@@ -1262,7 +1321,7 @@ Status TerarkZipTableBuilder::EmptyTableFinish() {
   range_del_block_.Reset();
   return WriteMetaData({
     {&kEmptyTableKey, emptyTableBH},
-    {!range_del_block_.empty() ? &kRangeDelBlock : NULL, tombstoneBH},
+    {!tombstoneBH.IsNull() ? &kRangeDelBlock : NULL, tombstoneBH},
   });
 }
 
@@ -1702,7 +1761,8 @@ TerarkZipTableBuilder::BuilderWriteValues(std::function<void(fstring)> write) {
     bitPos += oneSeqLen + 1;
     entryId += oneSeqLen;
   }
-  assert(entryId == properties_.num_entries);
+  // second pass no range deletion ...
+  //assert(entryId <= properties_.num_entries);
 }
   if (tmpDumpFile_.isOpen()) {
     tmpDumpFile_.close();
@@ -1721,7 +1781,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 	unique_ptr<TerocksIndex> index(TerocksIndex::LoadFile(tmpIndexFile));
 	assert(index->NumKeys() == keyStat_.numKeys);
 	Status s;
-  BlockHandle dataBlock, dictBlock, indexBlock, zvTypeBlock, tombstoneBlock;
+  BlockHandle dataBlock, dictBlock, indexBlock, zvTypeBlock, tombstoneBlock(0, 0);
   BlockHandle commonPrefixBlock;
 {
   size_t real_size = index->Memory().size() + zstore->mem_size() + bzvType_.mem_size();
@@ -1807,7 +1867,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
     {&kTerarkZipTableIndexBlock       , indexBlock},
     {&kTerarkZipTableValueTypeBlock   , zvTypeBlock},
     {&kTerarkZipTableCommonPrefixBlock, commonPrefixBlock},
-    {!range_del_block_.empty() ? &kRangeDelBlock : NULL, tombstoneBlock},
+    {!tombstoneBlock.IsNull() ? &kRangeDelBlock : NULL, tombstoneBlock},
 	});
   long long t8 = g_pf.now();
   {
@@ -2060,6 +2120,8 @@ class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
                          const ColumnFamilyOptions& cf_opts) const override;
 
   void* GetOptions() override { return &table_options_; }
+
+  bool IsDeleteRangeSupported() const override { return true; }
 
  private:
   TerarkZipTableOptions table_options_;
