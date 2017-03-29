@@ -241,7 +241,6 @@ ${TarBall}.tgz.oss.done: ${TarBall}.tgz
 ifeq (${REVISION},)
 	$(error var REVISION must be defined for target oss)
 endif
-	git tag ${REVISION}
 	ossutil cp   $< oss://terark-downloads/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
