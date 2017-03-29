@@ -238,7 +238,11 @@ ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	scp -P 22    $< root@nark.cc:/var/www/html/download/
 	touch $@
 ${TarBall}.tgz.oss.done: ${TarBall}.tgz
-	ossutil cp   $< oss://terark-downloads/terarkdb/$(notdir $<) -f
+ifeq (${REVISION},)
+	$(error var REVISION must be defined for target oss)
+endif
+	git tag ${REVISION}
+	ossutil cp   $< oss://terark-downloads/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
