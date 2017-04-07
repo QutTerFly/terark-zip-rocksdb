@@ -1,3 +1,4 @@
+OSS_ROOT ?= terark-downloads
 DBG_FLAGS ?= -g3 -D_DEBUG
 RLS_FLAGS ?= -O3 -DNDEBUG -g3
 WITH_BMI2 ?= $(shell sh ./cpu_has_bmi2.sh)
@@ -241,7 +242,7 @@ ${TarBall}.tgz.oss.done: ${TarBall}.tgz
 ifeq (${REVISION},)
 	$(error var REVISION must be defined for target oss)
 endif
-	ossutil cp   $< oss://terark-downloads/terarkdb/${REVISION}/$(notdir $<) -f
+	ossutil.sh cp   $< oss://${OSS_ROOT}/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
