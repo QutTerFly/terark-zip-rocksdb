@@ -287,6 +287,7 @@ endif
 	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp src/table/terark_zip_table.h           ${TarBall}/include/table
+	cp src/table/terark_zip_weak_function.h   ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
 	cd pkg; tar czf ${TarBallBaseName}.tgz ${TarBallBaseName}
