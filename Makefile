@@ -238,7 +238,10 @@ ${TarBall}.tgz.scp.done: ${TarBall}.tgz
 	scp -P 22    $< root@nark.cc:/var/www/html/download/
 	touch $@
 ${TarBall}.tgz.oss.done: ${TarBall}.tgz
-	ossutil cp   $< oss://terark-downloads/terarkdb/$(notdir $<) -f
+ifeq (${REVISION},)
+	$(error var REVISION must be defined for target oss)
+endif
+	ossutil cp   $< oss://terark-downloads/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
@@ -284,6 +287,7 @@ endif
 	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-core-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp src/table/terark_zip_table.h           ${TarBall}/include/table
+	cp src/table/terark_zip_weak_function.h   ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
 	cd pkg; tar czf ${TarBallBaseName}.tgz ${TarBallBaseName}
