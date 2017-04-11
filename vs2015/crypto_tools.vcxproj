@@ -72,11 +72,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
     <SourcePath>..\..\terark\3rdparty\getopt_win;$(SourcePath)</SourcePath>
-    <LibraryPath>..\3rdparty\cryptopp563\x64\Output\Debug;$(LibraryPath)</LibraryPath>
+    <LibraryPath>..\3rdparty\cryptopp\x64\Output\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
-    <LibraryPath>..\3rdparty\cryptopp563\x64\Output\Release;$(LibraryPath)</LibraryPath>
+    <LibraryPath>..\3rdparty\cryptopp\x64\Output\Release;$(LibraryPath)</LibraryPath>
     <SourcePath>..\..\terark\3rdparty\getopt_win;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
