@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26228.4
+VisualStudioVersion = 15.0.26403.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "terark-zip-rocksdb", "terark-zip-rocksdb.vcxproj", "{D0852590-2E24-4259-B060-7CEAA6C3B9CC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "crypto_tools", "crypto_tools.vcxproj", "{61F8D43C-1505-45A8-BCED-6EA25B819C0C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,14 @@ Global
 		{D0852590-2E24-4259-B060-7CEAA6C3B9CC}.Release|x64.Build.0 = Release|x64
 		{D0852590-2E24-4259-B060-7CEAA6C3B9CC}.Release|x86.ActiveCfg = Release|Win32
 		{D0852590-2E24-4259-B060-7CEAA6C3B9CC}.Release|x86.Build.0 = Release|Win32
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Debug|x64.ActiveCfg = Debug|x64
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Debug|x64.Build.0 = Debug|x64
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Debug|x86.ActiveCfg = Debug|Win32
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Debug|x86.Build.0 = Debug|Win32
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Release|x64.ActiveCfg = Release|x64
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Release|x64.Build.0 = Release|x64
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Release|x86.ActiveCfg = Release|Win32
+		{61F8D43C-1505-45A8-BCED-6EA25B819C0C}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

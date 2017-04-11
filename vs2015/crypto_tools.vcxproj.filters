@@ -15,33 +15,15 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\table\terark_zip_common.cc">
+    <ClCompile Include="..\..\terark\3rdparty\getopt_win\getopt.c">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\table\terark_zip_config.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\table\terark_zip_index.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\table\terark_zip_table.cc">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\terark\3rdparty\xxHash\xxhash.c">
+    <ClCompile Include="..\src\crypto_tools.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\src\table\terark_zip_common.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\table\terark_zip_index.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\table\terark_zip_table.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\terark\3rdparty\xxHash\xxhash.h">
+    <ClInclude Include="..\..\terark\3rdparty\getopt_win\getopt.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
