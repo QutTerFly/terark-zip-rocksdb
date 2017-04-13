@@ -266,6 +266,7 @@ ifeq (${PKG_WITH_DBG},1)
   endif
 endif
 ifeq (${PKG_WITH_STATIC},1)
+	mkdir -p ${TarBall}/lib_static
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r.a ${TarBall}/lib_static
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r.a ${TarBall}/lib_static
 	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r.a ${TarBall}/lib_static
