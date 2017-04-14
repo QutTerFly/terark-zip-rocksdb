@@ -18,7 +18,7 @@
     <ClCompile Include="..\..\terark\3rdparty\getopt_win\getopt.c">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\crypto_tools.cpp">
+    <ClCompile Include="..\tools\crypto_tools\crypto_tools.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

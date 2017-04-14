@@ -126,7 +126,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\terark\3rdparty\getopt_win\getopt.c" />
-    <ClCompile Include="..\src\crypto_tools.cpp" />
+    <ClCompile Include="..\tools\crypto_tools\crypto_tools.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\terark\3rdparty\getopt_win\getopt.h" />
