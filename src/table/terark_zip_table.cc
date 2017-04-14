@@ -171,6 +171,7 @@ static const std::string kEmptyTableKey = "ThisIsAnEmptyTable";
 
 class TerarkZipTableIterator;
 
+
 #ifdef TERARK_ZIP_TRIAL_VERSION
 const char g_trail_rand_delete[] = "TERARK_ZIP_TRIAL_VERSION random deleted this row";
 #endif
@@ -190,6 +191,48 @@ inline ByteArrayView SubStr(const ByteArrayView& x, size_t pos) {
   assert(pos <= x.size());
   return ByteArrayView(x.data() + pos, x.size() - pos);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
+public:
+  explicit
+    TerarkZipTableFactory(const TerarkZipTableOptions& tzto, TableFactory* fallback)
+    : table_options_(tzto), fallback_factory_(fallback) {
+    adaptive_factory_ = NewAdaptiveTableFactory();
+  }
+
+  const char* Name() const override { return "TerarkZipTable"; }
+
+  Status
+    NewTableReader(const TableReaderOptions& table_reader_options,
+      unique_ptr<RandomAccessFileReader>&& file,
+      uint64_t file_size,
+      unique_ptr<TableReader>* table,
+      bool prefetch_index_and_filter_in_cache) const override;
+
+  TableBuilder*
+    NewTableBuilder(const TableBuilderOptions& table_builder_options,
+      uint32_t column_family_id,
+      WritableFileWriter* file) const override;
+
+  std::string GetPrintableTableOptions() const override;
+
+  // Sanitizes the specified DB Options.
+  Status SanitizeOptions(const DBOptions& db_opts,
+    const ColumnFamilyOptions& cf_opts) const override;
+
+  void* GetOptions() override { return &table_options_; }
+
+  bool IsDeleteRangeSupported() const override { return true; }
+
+private:
+  TerarkZipTableOptions table_options_;
+  TableFactory* fallback_factory_;
+  TableFactory* adaptive_factory_; // just for open table
+  mutable size_t nth_new_terark_table_ = 0;
+  mutable size_t nth_new_fallback_table_ = 0;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1236,7 +1279,7 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
 
   file_ = file;
   sampleUpperBound_ = randomGenerator_.max() * table_options_.sampleRatio;
-  tmpValueFile_.path = tzto.localTempDir + "/Terocks-XXXXXX";
+  tmpValueFile_.path = tzto.localTempDir + "/Terark-XXXXXX";
 #if _MSC_VER
   if (int err = _mktemp_s(&tmpValueFile_.path[0], tmpValueFile_.path.size() + 1)) {
     fprintf(stderr
@@ -2214,49 +2257,35 @@ void TerarkZipTableBuilder::UpdateValueLenHistogram() {
 
 /////////////////////////////////////////////////////////////////////////////
 
-class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
- public:
-  explicit
-  TerarkZipTableFactory(const TerarkZipTableOptions& tzto, TableFactory* fallback)
-  : table_options_(tzto), fallback_factory_(fallback) {
-    adaptive_factory_ = NewAdaptiveTableFactory();
-  }
-
-  const char* Name() const override { return "TerarkZipTable"; }
-
-  Status
-  NewTableReader(const TableReaderOptions& table_reader_options,
-                 unique_ptr<RandomAccessFileReader>&& file,
-                 uint64_t file_size,
-				 unique_ptr<TableReader>* table,
-				 bool prefetch_index_and_filter_in_cache) const override;
-
-  TableBuilder*
-  NewTableBuilder(const TableBuilderOptions& table_builder_options,
-				  uint32_t column_family_id,
-				  WritableFileWriter* file) const override;
-
-  std::string GetPrintableTableOptions() const override;
-
-  // Sanitizes the specified DB Options.
-  Status SanitizeOptions(const DBOptions& db_opts,
-                         const ColumnFamilyOptions& cf_opts) const override;
-
-  void* GetOptions() override { return &table_options_; }
-
-  bool IsDeleteRangeSupported() const override { return true; }
-
- private:
-  TerarkZipTableOptions table_options_;
-  TableFactory* fallback_factory_;
-  TableFactory* adaptive_factory_; // just for open table
-  mutable size_t nth_new_terark_table_ = 0;
-  mutable size_t nth_new_fallback_table_ = 0;
-};
-
 class TableFactory*
 NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
 						 class TableFactory* fallback) {
+  int err = 0;
+  try {
+    TempFileDeleteOnClose test;
+    test.path = tzto.localTempDir + "/Terark-XXXXXX";
+#if _MSC_VER
+    if (err = _mktemp_s(&test.path[0], test.path.size() + 1)) {
+      throw 0;
+    }
+    test.open();
+#else
+    int fd = mkstemp(&test.path[0]);
+    if (fd < 0) {
+      err = errno;
+      throw 0;
+    }
+    test.dopen(fd);
+#endif
+    test.writer << "Terark";
+    test.complete_write();
+  }
+  catch (...) {
+    fprintf(stderr
+      , "ERROR: bad localTempDir %s %s\n"
+      , tzto.localTempDir.c_str(), err ? strerror(err) : "");
+    abort();
+  }
   TerarkZipTableFactory* table = new TerarkZipTableFactory(tzto, fallback);
   if (tzto.debugLevel < 0) {
     STD_INFO("NewTerarkZipTableFactory(\n%s)\n",
@@ -2420,7 +2449,7 @@ std::string TerarkZipTableFactory::GetPrintableTableOptions() const {
   const auto& tzto =  table_options_;
   const double gb = 1ull << 30;
 
-  ret += "localTempDir             = ";
+  ret += "localTempDir             : ";
   ret += tzto.localTempDir;
   ret += '\n';
 
@@ -2430,22 +2459,22 @@ std::string TerarkZipTableFactory::GetPrintableTableOptions() const {
 #define M_APPEND(fmt, value) \
   ret.append(buffer, snprintf(buffer, kBufferSize, fmt "\n", value))
 
-  M_APPEND("indexType                = %s"    , tzto.indexType.c_str()              );
-  M_APPEND("checksumLevel            = %d"    , tzto.checksumLevel                  );
-  M_APPEND("entropyAlgo              = %d"    , (int)tzto.entropyAlgo               );
-  M_APPEND("indexNestLevel           = %d"    , tzto.indexNestLevel                 );
-  M_APPEND("terarkZipMinLevel        = %d"    , tzto.terarkZipMinLevel              );
-  M_APPEND("debugLevel               = %d"    , tzto.debugLevel                     );
-  M_APPEND("useSuffixArrayLocalMatch = %s"    , cvb[!!tzto.useSuffixArrayLocalMatch]);
-  M_APPEND("warmUpIndexOnOpen        = %s"    , cvb[!!tzto.warmUpIndexOnOpen]       );
-  M_APPEND("warmUpValueOnOpen        = %s"    , cvb[!!tzto.warmUpValueOnOpen]       );
-  M_APPEND("disableSecondPassIter    = %s"    , cvb[!!tzto.disableSecondPassIter]   );
-  M_APPEND("estimateCompressionRatio = %f"    , tzto.estimateCompressionRatio       );
-  M_APPEND("sampleRatio              = %f"    , tzto.sampleRatio                    );
-  M_APPEND("indexCacheRatio          = %f"    , tzto.indexCacheRatio                );
-  M_APPEND("softZipWorkingMemLimit   = %.3fGB", tzto.softZipWorkingMemLimit / gb    );
-  M_APPEND("hardZipWorkingMemLimit   = %.3fGB", tzto.hardZipWorkingMemLimit / gb    );
-  M_APPEND("smallTaskMemory          = %.3fGB", tzto.smallTaskMemory / gb           );
+  M_APPEND("indexType                : %s"    , tzto.indexType.c_str()              );
+  M_APPEND("checksumLevel            : %d"    , tzto.checksumLevel                  );
+  M_APPEND("entropyAlgo              : %d"    , (int)tzto.entropyAlgo               );
+  M_APPEND("indexNestLevel           : %d"    , tzto.indexNestLevel                 );
+  M_APPEND("terarkZipMinLevel        : %d"    , tzto.terarkZipMinLevel              );
+  M_APPEND("debugLevel               : %d"    , tzto.debugLevel                     );
+  M_APPEND("useSuffixArrayLocalMatch : %s"    , cvb[!!tzto.useSuffixArrayLocalMatch]);
+  M_APPEND("warmUpIndexOnOpen        : %s"    , cvb[!!tzto.warmUpIndexOnOpen]       );
+  M_APPEND("warmUpValueOnOpen        : %s"    , cvb[!!tzto.warmUpValueOnOpen]       );
+  M_APPEND("disableSecondPassIter    : %s"    , cvb[!!tzto.disableSecondPassIter]   );
+  M_APPEND("estimateCompressionRatio : %f"    , tzto.estimateCompressionRatio       );
+  M_APPEND("sampleRatio              : %f"    , tzto.sampleRatio                    );
+  M_APPEND("indexCacheRatio          : %f"    , tzto.indexCacheRatio                );
+  M_APPEND("softZipWorkingMemLimit   : %.3fGB", tzto.softZipWorkingMemLimit / gb    );
+  M_APPEND("hardZipWorkingMemLimit   : %.3fGB", tzto.hardZipWorkingMemLimit / gb    );
+  M_APPEND("smallTaskMemory          : %.3fGB", tzto.smallTaskMemory / gb           );
 
 #undef M_APPEND
 
