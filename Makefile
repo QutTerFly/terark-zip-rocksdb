@@ -282,7 +282,10 @@ ifeq (${PKG_WITH_ROCKSDB},1)
   ifeq (${PKG_WITH_STATIC},1)
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.a* ${TarBall}/lib_static
   endif
+	cp -a /usr/lib64/libzstd.so*                                       ${TarBall}/lib
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.so* ${TarBall}/lib
+	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/db_bench       ${TarBall}/bin
+	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/ldb            ${TarBall}/bin
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib

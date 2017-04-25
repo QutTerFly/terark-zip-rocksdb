@@ -14,12 +14,10 @@ but you can not compile this software by yourself,
 you must get [our](http://terark.com) comercial license to use this software in production.
 <BR>[About us](http://terark.com)
 
-## Downloads precompiled trial version
-- [terark-zip-rocksdb-trial-Linux-x86\_64-g++-5.4-bmi2-1.tgz](http://nark.cc/download/terark-zip-rocksdb-trial-Linux-x86_64-g++-5.4-bmi2-1.tgz)
+## Downloads precompiled library
+  bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
   <BR>bmi2-1 means this software can only run on intel-haswell or newer CPU
-- [terark-zip-rocksdb-trial-Linux-x86\_64-g++-5.4-bmi2-0.tgz](http://nark.cc/download/terark-zip-rocksdb-trial-Linux-x86_64-g++-5.4-bmi2-0.tgz)
-  <BR>bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
-- [more downloads](http://nark.cc/download)
+[download](http://www.terark.com/download/terarkdb/latest)
 
 ## Must use our fork of rocksdb
 [Our fork of rocksdb](https://github.com/rockeet/rocksdb)
