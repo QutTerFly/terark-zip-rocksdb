@@ -84,8 +84,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;..\..\terark\3rdparty\xxHash;$(IncludePath)</IncludePath>
-    <LibraryPath>..\3rdparty\cryptopp563\x64\Output\Debug;..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;..\..\terark\3rdparty\xxHash;$(IncludePath)</IncludePath>
+    <LibraryPath>..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
     <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

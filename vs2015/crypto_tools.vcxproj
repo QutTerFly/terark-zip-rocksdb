@@ -70,9 +70,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
+    <IncludePath>C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
     <SourcePath>..\..\terark\3rdparty\getopt_win;$(SourcePath)</SourcePath>
-    <LibraryPath>..\3rdparty\cryptopp\x64\Output\Debug;$(LibraryPath)</LibraryPath>
+    <LibraryPath>C:\osc\cryptopp\include\cryptopp\x64\Output\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
