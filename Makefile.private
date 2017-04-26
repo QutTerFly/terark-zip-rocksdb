@@ -28,7 +28,7 @@ ifneq "${err}" "0"
    $(error err = ${err} MAKEFILE_LIST = ${MAKEFILE_LIST}, PWD = ${PWD}, gen_sh = ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk)
 endif
 
-TERARK_INC := -I../terark/src -I./3rdparty -I./3rdparty/Cyan4973
+TERARK_INC := -I../terark/src -I../cryptopp/include -I../json/include -I../terark/3rdparty/xxHash
 
 include ${BUILD_ROOT}/env.mk
 
@@ -111,7 +111,7 @@ endif
 #CXXFLAGS += -fdump-translation-unit -fdump-class-hierarchy
 
 override CFLAGS += ${COMMON_C_FLAGS}
-override CXXFLAGS += ${COMMON_C_FLAGS}
+override CXXFLAGS += ${COMMON_C_FLAGS} -DTerocksPrivateCode
 #$(error ${CXXFLAGS} "----" ${COMMON_C_FLAGS})
 
 DEFS := -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
@@ -137,6 +137,7 @@ ifeq (, $(findstring ${BOOST_LIB}, /usr/lib64 /usr/lib /usr/local/lib))
 endif
 
 #override INCS += -I/usr/include
+override LIBS += -L../cryptopp -lcryptopp
 
 ifeq "1" "0"
 ifeq ($(shell test -d /usr/local/lib64 && echo 1),1)
@@ -166,7 +167,7 @@ override CXXFLAGS += ${extf}
 #CXXFLAGS += -fnothrow-opt
 
 override INCS += -I/opt/include
-override LIBS += -L/opt/lib -lcrypto
+override LIBS += -L/opt/lib
 
 ifeq (, ${prefix})
 	ifeq (root, ${USER})
@@ -282,10 +283,7 @@ ifeq (${PKG_WITH_ROCKSDB},1)
   ifeq (${PKG_WITH_STATIC},1)
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.a* ${TarBall}/lib_static
   endif
-	cp -a /usr/lib64/libzstd.so*                                       ${TarBall}/lib
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.so* ${TarBall}/lib
-	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/db_bench       ${TarBall}/bin
-	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/ldb            ${TarBall}/bin
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
