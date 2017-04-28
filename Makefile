@@ -1,3 +1,4 @@
+OSS_ROOT ?= terark-downloads
 DBG_FLAGS ?= -g3 -D_DEBUG
 RLS_FLAGS ?= -O3 -DNDEBUG -g3
 WITH_BMI2 ?= $(shell sh ./cpu_has_bmi2.sh)
@@ -27,7 +28,7 @@ ifneq "${err}" "0"
    $(error err = ${err} MAKEFILE_LIST = ${MAKEFILE_LIST}, PWD = ${PWD}, gen_sh = ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk)
 endif
 
-TERARK_INC := -I../terark/src
+TERARK_INC := -I../terark/src -I./3rdparty -I./3rdparty/Cyan4973
 
 include ${BUILD_ROOT}/env.mk
 
@@ -127,31 +128,6 @@ override CXXFLAGS += ${DEFS}
 override INCS := ${TERARK_INC} ${INCS}
 override INCS += -I${ROCKSDB_SRC} -I${ROCKSDB_SRC}/include
 
-ifeq (, $(findstring ${BOOST_INC}, ${INCS} /usr/include /usr/local/include))
-  override INCS += -I${BOOST_INC}
-endif
-
-ifeq (, $(findstring ${BOOST_LIB}, /usr/lib64 /usr/lib /usr/local/lib))
-  override LIBS += -L${BOOST_LIB}
-endif
-
-#override INCS += -I/usr/include
-
-ifeq "1" "0"
-ifeq ($(shell test -d /usr/local/lib64 && echo 1),1)
-  override LIBS += -L/usr/local/lib64
-endif
-ifeq ($(shell test -d /usr/local/lib && echo 1),1)
-  override LIBS += -L/usr/local/lib
-endif
-ifeq ($(shell test -d /usr/lib64 && echo 1),1)
-  override LIBS += -L/usr/lib64
-endif
-ifeq ($(shell test -d /usr/lib && echo 1),1)
-  override LIBS += -L/usr/lib
-endif
-endif
-
 #LIBS += -ldl
 #LIBS += -lpthread
 
@@ -165,7 +141,7 @@ override CXXFLAGS += ${extf}
 #CXXFLAGS += -fnothrow-opt
 
 override INCS += -I/opt/include
-override LIBS += -L/opt/lib
+override LIBS += -L/opt/lib -lcrypto
 
 ifeq (, ${prefix})
 	ifeq (root, ${USER})
@@ -241,7 +217,7 @@ ${TarBall}.tgz.oss.done: ${TarBall}.tgz
 ifeq (${REVISION},)
 	$(error var REVISION must be defined for target oss)
 endif
-	ossutil cp   $< oss://terark-downloads/terarkdb/${REVISION}/$(notdir $<) -f
+	ossutil.sh cp   $< oss://${OSS_ROOT}/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
 ${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
@@ -265,6 +241,7 @@ ifeq (${PKG_WITH_DBG},1)
   endif
 endif
 ifeq (${PKG_WITH_STATIC},1)
+	mkdir -p ${TarBall}/lib_static
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r.a ${TarBall}/lib_static
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r.a ${TarBall}/lib_static
 	cp -a ${TerarkLibDir}/libterark-fsa-{${COMPILER}-,}r.a ${TarBall}/lib_static
@@ -280,7 +257,10 @@ ifeq (${PKG_WITH_ROCKSDB},1)
   ifeq (${PKG_WITH_STATIC},1)
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.a* ${TarBall}/lib_static
   endif
+	cp -a /usr/lib64/libzstd.so*                                       ${TarBall}/lib
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.so* ${TarBall}/lib
+	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/db_bench       ${TarBall}/bin
+	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/ldb            ${TarBall}/bin
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib

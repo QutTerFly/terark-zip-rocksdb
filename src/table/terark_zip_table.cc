@@ -362,7 +362,7 @@ public:
 
 private:
   unique_ptr<terark::BlobStore> valstore_;
-  unique_ptr<TerocksIndex> keyIndex_;
+  unique_ptr<TerarkIndex> keyIndex_;
   shared_ptr<Block> tombstone_;
   Slice commonPrefix_;
   bitfield_array<2> typeArray_;
@@ -499,7 +499,7 @@ public:
   }
 
 private:
-  void AddPrevUserKey();
+  void AddPrevUserKey(bool finish = false);
   void OfflineZipValueData();
   void UpdateValueLenHistogram();
   Status EmptyTableFinish();
@@ -532,7 +532,7 @@ private:
   AutoDeleteFile tmpZipValueFile_;
   std::mt19937_64 randomGenerator_;
   uint64_t sampleUpperBound_;
-  TerocksIndex::KeyStat keyStat_;
+  TerarkIndex::KeyStat keyStat_;
   size_t sampleLenSum_ = 0;
   WritableFileWriter* file_;
   uint64_t offset_ = 0;
@@ -928,7 +928,7 @@ private:
 
   const TerarkZipTableReader* const table_;
   const terark::BlobStore*    const valstore_;
-  const unique_ptr<TerocksIndex::Iterator> iter_;
+  const unique_ptr<TerarkIndex::Iterator> iter_;
   const fstring commonPrefix_;
   const bool reverse_;
 #if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
@@ -1095,7 +1095,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
 Status TerarkZipTableReader::LoadIndex(Slice mem) {
   auto func = "TerarkZipTableReader::LoadIndex()";
   try {
-	  keyIndex_ = TerocksIndex::LoadMemory(fstringOf(mem));
+	  keyIndex_ = TerarkIndex::LoadMemory(fstringOf(mem));
   }
   catch (const BadCrc32cException& ex) {
 	  return Status::Corruption(func, ex.what());
@@ -1280,23 +1280,7 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   file_ = file;
   sampleUpperBound_ = randomGenerator_.max() * table_options_.sampleRatio;
   tmpValueFile_.path = tzto.localTempDir + "/Terark-XXXXXX";
-#if _MSC_VER
-  if (int err = _mktemp_s(&tmpValueFile_.path[0], tmpValueFile_.path.size() + 1)) {
-    fprintf(stderr
-      , "ERROR: _mktemp_s(%s) failed with: %s, so we may use large memory\n"
-      , tmpValueFile_.path.c_str(), strerror(err));
-  }
-  tmpValueFile_.open();
-#else
-  int fd = mkstemp(&tmpValueFile_.path[0]);
-  if (fd < 0) {
-    int err = errno;
-    THROW_STD(invalid_argument
-        , "ERROR: TerarkZipTableBuilder::TerarkZipTableBuilder(): mkstemp(%s) = %s\n"
-        , tmpValueFile_.path.c_str(), strerror(err));
-  }
-  tmpValueFile_.dopen(fd);
-#endif
+  tmpValueFile_.open_temp();
   tmpKeyFile_.path = tmpValueFile_.path + ".keydata";
   tmpKeyFile_.open();
   tmpSampleFile_.path = tmpValueFile_.path + ".sample";
@@ -1415,6 +1399,7 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
       keyStat_.maxKeyLen = userKey.size();
       keyStat_.sumKeyLen = 0;
       keyStat_.numKeys = 0;
+      keyStat_.minKey.assign(userKey);
       prevUserKey_.assign(userKey);
       t0 = g_pf.now();
     }
@@ -1503,7 +1488,7 @@ Status TerarkZipTableBuilder::Finish() {
 	  return EmptyTableFinish();
 	}
 
-  AddPrevUserKey();
+  AddPrevUserKey(true);
   keyLenHistogram_.finish();
   valueLenHistogram_.finish();
   tmpKeyFile_.complete_write();
@@ -1605,7 +1590,8 @@ auto waitForMemory = [&](size_t myWorkMem, const char* who) {
 AutoDeleteFile tmpIndexFile{tmpValueFile_.path + ".index"};
 std::future<void> asyncIndexResult = std::async(std::launch::async, [&]()
 {
-  auto factory = TerocksIndex::GetFactory(table_options_.indexType);
+  //TODO fix reorder bug (blob store->get_mmap())
+  auto factory = TerarkIndex::SelectFactory(keyStat_, table_options_.indexType);
   if (!factory) {
     THROW_STD(invalid_argument,
         "invalid indexType: %s", table_options_.indexType.c_str());
@@ -1657,7 +1643,6 @@ Status
 TerarkZipTableBuilder::
 ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
   AutoDeleteFile tmpStoreFile{tmpValueFile_.path + ".zbs"};
-  AutoDeleteFile tmpStoreDict{tmpValueFile_.path + ".zbs-dict"};
   long long t3 = g_pf.now();
   auto zbuilder = UniquePtrOf(this->createZipBuilder());
 {
@@ -1697,9 +1682,9 @@ ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
 
   BuilderWriteValues([&](fstring value){zbuilder->addRecord(value);});
 
-  unique_ptr<DictZipBlobStore> zstore(zbuilder->finish());
+  unique_ptr<DictZipBlobStore> zstore(zbuilder->finish(
+      DictZipBlobStore::ZipBuilder::FinishFreeDict));
   DictZipBlobStore::ZipStat dzstat = zbuilder->getZipStat();
-  zbuilder.reset();
 
   long long t4 = g_pf.now();
 
@@ -1938,7 +1923,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
   const size_t realsampleLenSum = dictMem.size();
   long long rawBytes = properties_.raw_key_size + properties_.raw_value_size;
   long long t5 = g_pf.now();
-	unique_ptr<TerocksIndex> index(TerocksIndex::LoadFile(tmpIndexFile));
+	unique_ptr<TerarkIndex> index(TerarkIndex::LoadFile(tmpIndexFile));
 	assert(index->NumKeys() == keyStat_.numKeys);
 	Status s;
   BlockHandle dataBlock, dictBlock, indexBlock, zvTypeBlock(0, 0), tombstoneBlock(0, 0);
@@ -1955,6 +1940,13 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 }
   long long t6, t7;
   offset_ = 0;
+  auto writeAppend = [&](const void* data, size_t size) {
+    s = file_->Append(Slice((const char*)data, size));
+    if (!s.ok()) {
+      throw s;
+    }
+    offset_ += size;
+  };
   if (index->NeedsReorder()) {
     bitfield_array<2> zvType2(keyStat_.numKeys);
 		terark::AutoFree<uint32_t> newToOld(keyStat_.numKeys, UINT32_MAX);
@@ -1978,13 +1970,6 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 		t7 = g_pf.now();
 		try {
 		  dataBlock.set_offset(offset_);
-		  auto writeAppend = [&](const void* data, size_t size) {
-		    s = file_->Append(Slice((const char*)data, size));
-		    if (!s.ok()) {
-		      throw s;
-		    }
-		    offset_ += size;
-		  };
 		  zstore->reorder_zip_data(newToOld, std::ref(writeAppend));
 		  dataBlock.set_size(offset_ - dataBlock.offset());
 		} catch (const Status&) {
@@ -1994,8 +1979,38 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 		bzvType_.swap(zvType2);
 	}
   else {
-    t7 = t6 = t5;
-    WriteBlock(zstore->get_mmap(), file_, &offset_, &dataBlock);
+    if (fstring(ioptions_.user_comparator->Name()).startsWith("rev:")) {
+      bitfield_array<2> zvType2(keyStat_.numKeys);
+      terark::AutoFree<uint32_t> newToOld(keyStat_.numKeys);
+      t6 = g_pf.now();
+      for (size_t newId = 0, oldId = keyStat_.numKeys - 1; newId < keyStat_.numKeys;
+          ++newId, --oldId) {
+        newToOld.p[newId] = oldId;
+        zvType2.set0(newId, bzvType_[oldId]);
+      }
+      t7 = g_pf.now();
+      try {
+        dataBlock.set_offset(offset_);
+        zstore->reorder_zip_data(newToOld, std::ref(writeAppend));
+        dataBlock.set_size(offset_ - dataBlock.offset());
+      }
+      catch (const Status&) {
+        return s;
+      }
+      bzvType_.clear();
+      bzvType_.swap(zvType2);
+    }
+    else {
+      t7 = t6 = t5;
+      try {
+        dataBlock.set_offset(offset_);
+        zstore->save_mmap(std::ref(writeAppend));
+        dataBlock.set_size(offset_ - dataBlock.offset());
+      }
+      catch (const Status&) {
+        return s;
+      }
+    }
   }
   fstring commonPrefix(prevUserKey_.data(), keyStat_.commonPrefixLen);
   WriteBlock(commonPrefix, file_, &offset_, &commonPrefixBlock);
@@ -2152,14 +2167,15 @@ Status TerarkZipTableBuilder::WriteMetaData(std::initializer_list<std::pair<cons
 }
 
 Status TerarkZipTableBuilder::OfflineFinish() {
-  std::unique_ptr<DictZipBlobStore> zstore(zbuilder_->finish());
+  std::unique_ptr<DictZipBlobStore> zstore(zbuilder_->finish(
+      DictZipBlobStore::ZipBuilder::FinishFreeDict));
   auto dzstat = zbuilder_->getZipStat();
   zbuilder_.reset();
   valvec<byte_t> commonPrefix(prevUserKey_.data(), keyStat_.commonPrefixLen);
   AutoDeleteFile tmpIndexFile{tmpValueFile_.path + ".index"};
   long long t1 = g_pf.now();
   {
-    auto factory = TerocksIndex::GetFactory(table_options_.indexType);
+    auto factory = TerarkIndex::GetFactory(table_options_.indexType);
     if (!factory) {
       THROW_STD(invalid_argument,
           "invalid indexType: %s", table_options_.indexType.c_str());
@@ -2185,7 +2201,7 @@ void TerarkZipTableBuilder::Abandon() {
   tmpZipValueFile_.Delete();
 }
 
-void TerarkZipTableBuilder::AddPrevUserKey() {
+void TerarkZipTableBuilder::AddPrevUserKey(bool finish) {
   UpdateValueLenHistogram(); // will use valueBuf_
   if (zbuilder_) {
     OfflineZipValueData(); // will change valueBuf_
@@ -2196,6 +2212,9 @@ void TerarkZipTableBuilder::AddPrevUserKey() {
 	valueBits_.push_back(false);
 	keyStat_.sumKeyLen += prevUserKey_.size();
 	keyStat_.numKeys++;
+  if (finish) {
+    keyStat_.maxKey.assign(prevUserKey_);
+  }
 }
 
 void TerarkZipTableBuilder::OfflineZipValueData() {
@@ -2264,19 +2283,7 @@ NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
   try {
     TempFileDeleteOnClose test;
     test.path = tzto.localTempDir + "/Terark-XXXXXX";
-#if _MSC_VER
-    if (err = _mktemp_s(&test.path[0], test.path.size() + 1)) {
-      throw 0;
-    }
-    test.open();
-#else
-    int fd = mkstemp(&test.path[0]);
-    if (fd < 0) {
-      err = errno;
-      throw 0;
-    }
-    test.dopen(fd);
-#endif
+    test.open_temp();
     test.writer << "Terark";
     test.complete_write();
   }
@@ -2286,13 +2293,13 @@ NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
       , tzto.localTempDir.c_str(), err ? strerror(err) : "");
     abort();
   }
-  TerarkZipTableFactory* table = new TerarkZipTableFactory(tzto, fallback);
+  TerarkZipTableFactory* factory = new TerarkZipTableFactory(tzto, fallback);
   if (tzto.debugLevel < 0) {
     STD_INFO("NewTerarkZipTableFactory(\n%s)\n",
-      table->GetPrintableTableOptions().c_str()
+      factory->GetPrintableTableOptions().c_str()
     );
   }
-  return table;
+  return factory;
 }
 
 inline static
@@ -2306,7 +2313,7 @@ bool IsBytewiseComparator(const Comparator* cmp) {
     // reverse bytewise compare, needs reverse in iterator
     return true;
   }
-# if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
+# if defined(TERARK_SUPPORT_UINT64_COMPARATOR)
   if (name == "rocksdb.Uint64Comparator") {
     return true;
   }
@@ -2329,12 +2336,6 @@ const {
 		return Status::InvalidArgument("TerarkZipTableFactory::NewTableReader()",
 				"user comparator must be 'leveldb.BytewiseComparator'");
 	}
-#if 0
-  if (fstring(userCmp->Name()).startsWith("rev:")) {
-    return Status::InvalidArgument("TerarkZipTableFactory::NewTableReader()",
-        "Damn, fuck out the reverse bytewise comparator");
-  }
-#endif
 	Footer footer;
 	Status s = ReadFooterFromFile(file.get(), file_size, &footer);
 	if (!s.ok()) {
@@ -2399,13 +2400,6 @@ const {
 				"TerarkZipTableFactory::NewTableBuilder(): "
 				"user comparator must be 'leveldb.BytewiseComparator'");
 	}
-#if 0
-  if (fstring(userCmp->Name()).startsWith("rev:")) {
-    THROW_STD(invalid_argument,
-        "TerarkZipTableFactory::NewTableBuilder(): "
-        "user comparator must be 'leveldb.BytewiseComparator'");
-  }
-#endif
   int curlevel = table_builder_options.level;
   int numlevel = table_builder_options.ioptions.num_levels;
   int minlevel = table_options_.terarkZipMinLevel;
@@ -2489,13 +2483,7 @@ const {
 		return Status::InvalidArgument("TerarkZipTableFactory::SanitizeOptions()",
 				"user comparator must be 'leveldb.BytewiseComparator'");
 	}
-#if 0
-	if (fstring(cf_opts.comparator->Name()).startsWith("rev:")) {
-	  return Status::InvalidArgument("TerarkZipTableFactory::SanitizeOptions",
-	      "Damn, fuck out the reverse bytewise comparator");
-	}
-#endif
-  auto indexFactory = TerocksIndex::GetFactory(table_options_.indexType);
+  auto indexFactory = TerarkIndex::GetFactory(table_options_.indexType);
   if (!indexFactory) {
     std::string msg = "invalid indexType: " + table_options_.indexType;
     return Status::InvalidArgument(msg);

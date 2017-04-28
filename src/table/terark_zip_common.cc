@@ -1,10 +1,49 @@
 #include "terark_zip_common.h"
-# include <ctime>
-#ifndef _MSC_VER
+#include <terark/io/byte_swap.hpp>
+#include <boost/predef/other/endian.h>
+#include <terark/util/throw.hpp>
+#include <stdlib.h>
+#include <ctime>
+#ifdef _MSC_VER
+# include <io.h>
+#else
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <fcntl.h>
 # include <cxxabi.h>
 #endif
 
 namespace rocksdb {
+
+uint64_t ReadUint64(const byte_t* beg, const byte_t* end) {
+  assert(end - beg <= 8);
+  union {
+    byte_t bytes[8];
+    uint64_t value = 0;
+  } c;
+  size_t l = end - beg;
+  memcpy(c.bytes + (8 - l), beg, l);
+#if BOOST_ENDIAN_LITTLE_BYTE
+  return terark::byte_swap(c.value);
+#else
+  return c.value;
+#endif
+}
+
+void AssignUint64(byte_t* beg, byte_t* end, uint64_t value) {
+  assert(end - beg <= 8);
+  union {
+    byte_t bytes[8];
+    uint64_t value;
+  } c;
+#if BOOST_ENDIAN_LITTLE_BYTE
+  c.value = terark::byte_swap(value);
+#else
+  c.value = value;
+#endif
+  size_t l = end - beg;
+  memcpy(beg, c.bytes + (8 - l), l);
+}
 
 const char* StrDateTimeNow() {
   thread_local char buf[64];
@@ -38,6 +77,29 @@ AutoDeleteFile::~AutoDeleteFile() {
 TempFileDeleteOnClose::~TempFileDeleteOnClose() {
   if (fp)
     this->close();
+}
+
+/// this->path is temporary filename template such as: /some/dir/tmpXXXXXX
+void TempFileDeleteOnClose::open_temp() {
+  if (!terark::fstring(path).endsWith("XXXXXX")) {
+    THROW_STD(invalid_argument,
+        "ERROR: path = \"%s\", must ends with \"XXXXXX\"", path.c_str());
+  }
+#if _MSC_VER
+  if (int err = _mktemp_s(&path[0], path.size() + 1)) {
+    THROW_STD(invalid_argument, "ERROR: _mktemp_s(%s) = %s"
+        , path.c_str(), strerror(err));
+  }
+  this->open();
+#else
+  int fd = mkstemp(&path[0]);
+  if (fd < 0) {
+    int err = errno;
+    THROW_STD(invalid_argument, "ERROR: mkstemp(%s) = %s"
+        , path.c_str(), strerror(err));
+  }
+  this->dopen(fd);
+#endif
 }
 void TempFileDeleteOnClose::open() {
   fp.open(path.c_str(), "wb+");

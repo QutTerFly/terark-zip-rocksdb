@@ -18,37 +18,64 @@ using terark::NestLoudsTrieDAWG_Mixed_SE_512;
 using terark::NestLoudsTrieDAWG_Mixed_IL_256;
 using terark::NestLoudsTrieDAWG_Mixed_XL_256;
 using terark::SortableStrVec;
+using terark::MmapWholeFile;
 
-static terark::hash_strmap<TerocksIndex::FactoryPtr> g_TerocksIndexFactroy;
+static terark::hash_strmap<TerarkIndex::FactoryPtr> g_TerarkIndexFactroy;
+static terark::hash_strmap<std::string>             g_TerarkIndexName;
 
-TerocksIndex::AutoRegisterFactory::AutoRegisterFactory(
+struct TerarkIndexHeader {
+  uint8_t   magic_len;
+  char      magic[19];
+  char      class_name[60];
+
+  uint32_t  reserved_80_4;
+  uint32_t  header_size;
+  uint32_t  version;
+  uint32_t  reserved_92_4;
+
+  uint64_t  file_size;
+  uint64_t  reserved_102_24;
+};
+
+TerarkIndex::AutoRegisterFactory::AutoRegisterFactory(
     std::initializer_list<const char*> names,
+    const char* riit_name,
     Factory* factory) {
   for (const char* name : names) {
 //  STD_INFO("AutoRegisterFactory: %s\n", name);
-    g_TerocksIndexFactroy.insert_i(name, FactoryPtr(factory));
+    g_TerarkIndexFactroy.insert_i(name, FactoryPtr(factory));
+    g_TerarkIndexName.insert_i(riit_name, *names.begin());
   }
 }
 
-const TerocksIndex::Factory* TerocksIndex::GetFactory(fstring name) {
-  size_t idx = g_TerocksIndexFactroy.find_i(name);
-  if (idx < g_TerocksIndexFactroy.end_i()) {
-    auto factory = g_TerocksIndexFactroy.val(idx).get();
+const TerarkIndex::Factory* TerarkIndex::GetFactory(fstring name) {
+  size_t idx = g_TerarkIndexFactroy.find_i(name);
+  if (idx < g_TerarkIndexFactroy.end_i()) {
+    auto factory = g_TerarkIndexFactroy.val(idx).get();
     return factory;
   }
   return NULL;
 }
 
-const TerocksIndex::Factory*
-TerocksIndex::SelectFactory(const KeyStat& ks, fstring name) {
+const TerarkIndex::Factory*
+TerarkIndex::SelectFactory(const KeyStat& ks, fstring name) {
+  if (ks.maxKeyLen == ks.minKeyLen && ks.minKeyLen > 0 && ks.maxKeyLen <= 8) {
+    uint64_t
+      minValue = ReadUint64(ks.minKey.begin(), ks.minKey.end()),
+      maxValue = ReadUint64(ks.maxKey.begin(), ks.maxKey.end());
+    uint64_t diff = (minValue < maxValue ? maxValue - minValue : minValue - maxValue) + 1;
+    if (diff < ks.numKeys * 30 && ks.numKeys < (4ULL << 30)) {
+      return GetFactory("UintIndex");
+    }
+  }
   return GetFactory(name);
 }
 
-TerocksIndex::~TerocksIndex() {}
-TerocksIndex::Factory::~Factory() {}
-TerocksIndex::Iterator::~Iterator() {}
+TerarkIndex::~TerarkIndex() {}
+TerarkIndex::Factory::~Factory() {}
+TerarkIndex::Iterator::~Iterator() {}
 
-class NestLoudsTrieIterBase : public TerocksIndex::Iterator {
+class NestLoudsTrieIterBase : public TerarkIndex::Iterator {
 protected:
   unique_ptr<terark::ADFA_LexIterator> m_iter;
   template<class NLTrie>
@@ -66,7 +93,7 @@ protected:
    : m_iter(iter) {}
 };
 template<class NLTrie>
-class NestLoudsTrieIndex : public TerocksIndex {
+class NestLoudsTrieIndex : public TerarkIndex {
   unique_ptr<NLTrie> m_trie;
   class MyIterator : public NestLoudsTrieIterBase {
     const NLTrie* m_trie;
@@ -121,7 +148,7 @@ public:
     void Build(TempFileDeleteOnClose& tmpKeyFile,
                const TerarkZipTableOptions& tzopt,
                fstring tmpFilePath,
-               const KeyStat& ks) const override {
+               KeyStat& ks) const override {
       NativeDataInput<InputBuffer> reader(&tmpKeyFile.fp);
 #if !defined(NDEBUG)
       SortableStrVec backupKeys;
@@ -174,7 +201,7 @@ public:
       trie->build_from(keyVec, conf);
       trie->save_mmap(tmpFilePath);
     }
-    unique_ptr<TerocksIndex> LoadMemory(fstring mem) const override {
+    unique_ptr<TerarkIndex> LoadMemory(fstring mem) const override {
       unique_ptr<BaseDFA>
       dfa(BaseDFA::load_mmap_user_mem(mem.data(), mem.size()));
       auto trie = dynamic_cast<NLTrie*>(dfa.get());
@@ -182,11 +209,11 @@ public:
         throw std::invalid_argument("Bad trie class: " + ClassName(*dfa)
             + ", should be " + ClassName<NLTrie>());
       }
-      unique_ptr<TerocksIndex> index(new NestLoudsTrieIndex(trie));
+      unique_ptr<TerarkIndex> index(new NestLoudsTrieIndex(trie));
       dfa.release();
       return std::move(index);
     }
-    unique_ptr<TerocksIndex> LoadFile(fstring fpath) const override {
+    unique_ptr<TerarkIndex> LoadFile(fstring fpath) const override {
       unique_ptr<BaseDFA> dfa(BaseDFA::load_mmap(fpath));
       auto trie = dynamic_cast<NLTrie*>(dfa.get());
       if (NULL == trie) {
@@ -194,7 +221,7 @@ public:
             "File: " + fpath + ", Bad trie class: " + ClassName(*dfa)
             + ", should be " + ClassName<NLTrie>());
       }
-      unique_ptr<TerocksIndex> index(new NestLoudsTrieIndex(trie));
+      unique_ptr<TerarkIndex> index(new NestLoudsTrieIndex(trie));
       dfa.release();
       return std::move(index);
     }
@@ -204,6 +231,8 @@ public:
     }
   };
 };
+
+
 typedef NestLoudsTrieDAWG_IL_256 NestLoudsTrieDAWG_IL_256_32;
 typedef NestLoudsTrieDAWG_SE_512 NestLoudsTrieDAWG_SE_512_32;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_SE_512_32> TerocksIndex_NestLoudsTrieDAWG_SE_512_32;
@@ -211,39 +240,39 @@ typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_IL_256_32> TerocksIndex_NestLoudsTr
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_Mixed_SE_512> TerocksIndex_NestLoudsTrieDAWG_Mixed_SE_512;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_Mixed_IL_256> TerocksIndex_NestLoudsTrieDAWG_Mixed_IL_256;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_Mixed_XL_256> TerocksIndex_NestLoudsTrieDAWG_Mixed_XL_256;
-TerocksIndexRegister(TerocksIndex_NestLoudsTrieDAWG_SE_512_32, "NestLoudsTrieDAWG_SE_512", "SE_512_32", "SE_512");
-TerocksIndexRegister(TerocksIndex_NestLoudsTrieDAWG_IL_256_32, "NestLoudsTrieDAWG_IL_256", "IL_256_32", "IL_256", "NestLoudsTrieDAWG_IL");
-TerocksIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_SE_512, "NestLoudsTrieDAWG_Mixed_SE_512", "Mixed_SE_512");
-TerocksIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_IL_256, "NestLoudsTrieDAWG_Mixed_IL_256", "Mixed_IL_256");
-TerocksIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_XL_256, "NestLoudsTrieDAWG_Mixed_XL_256", "Mixed_XL_256");
+TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_SE_512_32, "NestLoudsTrieDAWG_SE_512", "SE_512_32", "SE_512");
+TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_IL_256_32, "NestLoudsTrieDAWG_IL_256", "IL_256_32", "IL_256", "NestLoudsTrieDAWG_IL");
+TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_SE_512, "NestLoudsTrieDAWG_Mixed_SE_512", "Mixed_SE_512");
+TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_IL_256, "NestLoudsTrieDAWG_Mixed_IL_256", "Mixed_IL_256");
+TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_XL_256, "NestLoudsTrieDAWG_Mixed_XL_256", "Mixed_XL_256");
 
-unique_ptr<TerocksIndex> TerocksIndex::LoadFile(fstring fpath) {
-  TerocksIndex::Factory* factory = NULL;
+
+unique_ptr<TerarkIndex> TerarkIndex::LoadFile(fstring fpath) {
+  TerarkIndex::Factory* factory = NULL;
   {
-    terark::MmapWholeFile mmap(fpath);
-    auto header = (const terark::DFA_MmapHeader*)mmap.base;
-    size_t idx = g_TerocksIndexFactroy.find_i(header->dfa_class_name);
-    if (idx >= g_TerocksIndexFactroy.end_i()) {
+    MmapWholeFile mmap(fpath);
+    auto header = (const TerarkIndexHeader*)mmap.base;
+    size_t idx = g_TerarkIndexFactroy.find_i(header->class_name);
+    if (idx >= g_TerarkIndexFactroy.end_i()) {
       throw std::invalid_argument(
-          "TerocksIndex::LoadFile(" + fpath + "): Unknown trie class: "
-          + header->dfa_class_name);
+          "TerarkIndex::LoadFile(" + fpath + "): Unknown class: "
+          + header->class_name);
     }
-    factory = g_TerocksIndexFactroy.val(idx).get();
+    factory = g_TerarkIndexFactroy.val(idx).get();
   }
   return factory->LoadFile(fpath);
 }
 
-unique_ptr<TerocksIndex> TerocksIndex::LoadMemory(fstring mem) {
-  auto header = (const terark::DFA_MmapHeader*)mem.data();
-  size_t idx = g_TerocksIndexFactroy.find_i(header->dfa_class_name);
-  if (idx >= g_TerocksIndexFactroy.end_i()) {
+unique_ptr<TerarkIndex> TerarkIndex::LoadMemory(fstring mem) {
+  auto header = (const TerarkIndexHeader*)mem.data();
+  size_t idx = g_TerarkIndexFactroy.find_i(header->class_name);
+  if (idx >= g_TerarkIndexFactroy.end_i()) {
     throw std::invalid_argument(
-        std::string("TerocksIndex::LoadMemory(): Unknown trie class: ")
-        + header->dfa_class_name);
+        std::string("TerarkIndex::LoadMemory(): Unknown class: ")
+        + header->class_name);
   }
-  TerocksIndex::Factory* factory = g_TerocksIndexFactroy.val(idx).get();
+  TerarkIndex::Factory* factory = g_TerarkIndexFactroy.val(idx).get();
   return factory->LoadMemory(mem);
 }
-
 
 } // namespace rocksdb
