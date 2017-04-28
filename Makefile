@@ -128,31 +128,6 @@ override CXXFLAGS += ${DEFS}
 override INCS := ${TERARK_INC} ${INCS}
 override INCS += -I${ROCKSDB_SRC} -I${ROCKSDB_SRC}/include
 
-ifeq (, $(findstring ${BOOST_INC}, ${INCS} /usr/include /usr/local/include))
-  override INCS += -I${BOOST_INC}
-endif
-
-ifeq (, $(findstring ${BOOST_LIB}, /usr/lib64 /usr/lib /usr/local/lib))
-  override LIBS += -L${BOOST_LIB}
-endif
-
-#override INCS += -I/usr/include
-
-ifeq "1" "0"
-ifeq ($(shell test -d /usr/local/lib64 && echo 1),1)
-  override LIBS += -L/usr/local/lib64
-endif
-ifeq ($(shell test -d /usr/local/lib && echo 1),1)
-  override LIBS += -L/usr/local/lib
-endif
-ifeq ($(shell test -d /usr/lib64 && echo 1),1)
-  override LIBS += -L/usr/lib64
-endif
-ifeq ($(shell test -d /usr/lib && echo 1),1)
-  override LIBS += -L/usr/lib
-endif
-endif
-
 #LIBS += -ldl
 #LIBS += -lpthread
 
