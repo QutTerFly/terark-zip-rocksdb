@@ -30,6 +30,12 @@
     <ClCompile Include="..\3rdparty\Cyan4973\xxhash.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\table\terark_zip_table_builder.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\table\terark_zip_table_reader.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\table\terark_zip_common.h">
@@ -42,6 +48,15 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="..\3rdparty\Cyan4973\xxhash.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\table\terark_zip_table_builder.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\table\terark_zip_table_reader.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\table\terark_zip_internal.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

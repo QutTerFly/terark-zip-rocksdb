@@ -24,12 +24,17 @@
     <ClCompile Include="..\src\table\terark_zip_config.cc" />
     <ClCompile Include="..\src\table\terark_zip_index.cc" />
     <ClCompile Include="..\src\table\terark_zip_table.cc" />
+    <ClCompile Include="..\src\table\terark_zip_table_builder.cc" />
+    <ClCompile Include="..\src\table\terark_zip_table_reader.cc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\3rdparty\Cyan4973\xxhash.h" />
     <ClInclude Include="..\src\table\terark_zip_common.h" />
     <ClInclude Include="..\src\table\terark_zip_index.h" />
+    <ClInclude Include="..\src\table\terark_zip_internal.h" />
     <ClInclude Include="..\src\table\terark_zip_table.h" />
+    <ClInclude Include="..\src\table\terark_zip_table_builder.h" />
+    <ClInclude Include="..\src\table\terark_zip_table_reader.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
