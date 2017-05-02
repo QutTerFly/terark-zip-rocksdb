@@ -19,14 +19,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\terark\3rdparty\xxHash\xxhash.c" />
+    <ClCompile Include="..\3rdparty\Cyan4973\xxhash.c" />
     <ClCompile Include="..\src\table\terark_zip_common.cc" />
     <ClCompile Include="..\src\table\terark_zip_config.cc" />
     <ClCompile Include="..\src\table\terark_zip_index.cc" />
     <ClCompile Include="..\src\table\terark_zip_table.cc" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\terark\3rdparty\xxHash\xxhash.h" />
+    <ClInclude Include="..\3rdparty\Cyan4973\xxhash.h" />
     <ClInclude Include="..\src\table\terark_zip_common.h" />
     <ClInclude Include="..\src\table\terark_zip_index.h" />
     <ClInclude Include="..\src\table\terark_zip_table.h" />
@@ -84,8 +84,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;..\..\terark\3rdparty\xxHash;$(IncludePath)</IncludePath>
-    <LibraryPath>..\3rdparty\cryptopp563\x64\Output\Debug;..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
+    <LibraryPath>..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
     <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -100,7 +100,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;TerocksPrivateCode;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>terark-zbs-d.lib;terark-fsa-d.lib;terark-core-d.lib;rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
