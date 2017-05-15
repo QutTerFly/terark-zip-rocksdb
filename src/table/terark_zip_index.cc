@@ -59,15 +59,6 @@ const TerarkIndex::Factory* TerarkIndex::GetFactory(fstring name) {
 
 const TerarkIndex::Factory*
 TerarkIndex::SelectFactory(const KeyStat& ks, fstring name) {
-  if (ks.maxKeyLen == ks.minKeyLen && ks.minKeyLen > 0 && ks.maxKeyLen <= 8) {
-    uint64_t
-      minValue = ReadUint64(ks.minKey.begin(), ks.minKey.end()),
-      maxValue = ReadUint64(ks.maxKey.begin(), ks.maxKey.end());
-    uint64_t diff = (minValue < maxValue ? maxValue - minValue : minValue - maxValue) + 1;
-    if (diff < ks.numKeys * 30 && ks.numKeys < (4ULL << 30)) {
-      return GetFactory("UintIndex");
-    }
-  }
   return GetFactory(name);
 }
 
@@ -145,11 +136,10 @@ public:
   }
   class MyFactory : public Factory {
   public:
-    void Build(TempFileDeleteOnClose& tmpKeyFile,
+    void Build(NativeDataInput<InputBuffer>& reader,
                const TerarkZipTableOptions& tzopt,
-               fstring tmpFilePath,
+               std::function<void(const void *, size_t)> write,
                KeyStat& ks) const override {
-      NativeDataInput<InputBuffer> reader(&tmpKeyFile.fp);
 #if !defined(NDEBUG)
       SortableStrVec backupKeys;
 #endif
@@ -162,14 +152,9 @@ public:
         reader >> keyBuf;
         keyVec.push_back(fstring(keyBuf).substr(ks.commonPrefixLen));
       }
-      if (tzopt.debugLevel != 2 && tzopt.debugLevel != 3) {
-        tmpKeyFile.close();
-      }
       if (keyVec[0] > keyVec.back()) {
         std::reverse(keyVec.m_index.begin(), keyVec.m_index.end());
       }
-//      for(size_t i = 0, ei = keyVec.size(); i < ei)
-
 #if !defined(NDEBUG)
       for (size_t i = 1; i < keyVec.size(); ++i) {
         fstring prev = keyVec[i-1];
@@ -199,7 +184,7 @@ public:
       conf.isInputSorted = true;
       std::unique_ptr<NLTrie> trie(new NLTrie());
       trie->build_from(keyVec, conf);
-      trie->save_mmap(tmpFilePath);
+      trie->save_mmap(write);
     }
     unique_ptr<TerarkIndex> LoadMemory(fstring mem) const override {
       unique_ptr<BaseDFA>

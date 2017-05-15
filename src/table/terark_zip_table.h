@@ -74,7 +74,7 @@ struct TerarkZipTableOptions {
   // use dictZip for value when average value length >= minDictZipValueSize
   // otherwise do not use dictZip
   size_t minDictZipValueSize = 30;
-  size_t keyPrefixLenReserved = 0; // unused
+  size_t keyPrefixLen = 0; // for IndexID
 
   // should be a small value, typically 0.001
   // default is to disable indexCache, because the improvement
