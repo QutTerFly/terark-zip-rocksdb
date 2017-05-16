@@ -65,67 +65,6 @@ const std::string kTerarkEmptyTableKey             = "ThisIsAnEmptyTable";
 
 
 
-size_t TerarkZipMultiOffsetInfo::calc_size(size_t prefixLen, size_t partCount) {
-  BOOST_STATIC_ASSERT(sizeof(KeyValueOffset) % 16 == 0);
-  return 16 + partCount * sizeof(KeyValueOffset) + terark::align_up(prefixLen * partCount, 16);
-}
-
-void TerarkZipMultiOffsetInfo::Init(size_t prefixLen, size_t partCount) {
-  prefixLen_ = prefixLen;
-  partCount_ = partCount;
-  offset_.resize_no_init(partCount);
-  prefixSet_.resize_no_init(prefixLen * partCount);
-}
-
-void TerarkZipMultiOffsetInfo::set(size_t i, fstring p, size_t k, size_t v, size_t t, size_t c) {
-  assert(p.size() == prefixLen_);
-  memcpy(prefixSet_.data() + i * prefixLen_, p.data(), p.size());
-  offset_[i].key = k;
-  offset_[i].value = v;
-  offset_[i].type = t;
-  offset_[i].commonPrefix = c;
-}
-
-valvec<byte_t> TerarkZipMultiOffsetInfo::dump() {
-  valvec<byte_t> ret;
-  size_t size = calc_size(prefixLen_, partCount_);
-  ret.resize_no_init(size);
-  size_t offset = 0;
-  auto push = [&](const void* d, size_t s) {
-    memcpy(ret.data() + offset, d, s);
-    offset += s;
-  };
-  push(&partCount_, 8);
-  push(&prefixLen_, 8);
-  push(offset_.data(), offset_.size() * sizeof(KeyValueOffset));
-  push(prefixSet_.data(), prefixSet_.size());
-  memset(ret.data() + offset, 0, size - offset);
-  return ret;
-}
-
-bool TerarkZipMultiOffsetInfo::risk_set_memory(const void* p, size_t s) {
-  offset_.clear();
-  prefixSet_.clear();
-  if (s < 16) {
-    return false;
-  }
-  auto src = (const byte_t*)p;
-  memcpy(&partCount_, src, 8);
-  memcpy(&prefixLen_, src + 8, 8);
-  if (s != calc_size(prefixLen_, partCount_)) {
-    return false;
-  }
-  offset_.risk_set_data((KeyValueOffset*)(src + 16), partCount_);
-  prefixSet_.risk_set_data((char*)src + 16 + partCount_ * sizeof(KeyValueOffset),
-    prefixLen_ * partCount_);
-  return true;
-}
-
-void TerarkZipMultiOffsetInfo::risk_release_ownership() {
-  offset_.risk_release_ownership();
-  prefixSet_.risk_release_ownership();
-}
-
 class TableFactory*
   NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
     class TableFactory* fallback) {
