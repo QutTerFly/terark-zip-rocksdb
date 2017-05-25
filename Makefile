@@ -207,7 +207,9 @@ ${static_TerarkZipRocks_r} : $(call objs,TerarkZipRocks,r)
 TarBallBaseName := ${TerarkZipRocks_lib}-${BUILD_NAME}
 TarBall := pkg/${TerarkZipRocks_lib}-${BUILD_NAME}
 .PHONY : pkg
-pkg : ${TarBall}.tgz
+.PHONY : tgz
+pkg : ${TarBall}
+tgz : ${TarBall}.tgz
 scp : ${TarBall}.tgz.scp.done
 oss : ${TarBall}.tgz.oss.done
 ${TarBall}.tgz.scp.done: ${TarBall}.tgz
@@ -220,9 +222,9 @@ endif
 	ossutil.sh cp   $< oss://${OSS_ROOT}/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
-${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
-                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r} \
-                $(wildcard ${TerarkLibDir}/libterark-*)
+${TarBall}: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
+            ${TerarkZipRocks_r} ${static_TerarkZipRocks_r} \
+            $(wildcard ${TerarkLibDir}/libterark-*)
 	rm -rf ${TarBall}
 	mkdir -p ${TarBall}/lib
 	mkdir -p ${TarBall}/bin
@@ -270,6 +272,8 @@ endif
 	cp src/table/terark_zip_weak_function.h   ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
+
+${TarBall}.tgz: ${TarBall}
 	cd pkg; tar czf ${TarBallBaseName}.tgz ${TarBallBaseName}
 
 %${DLL_SUFFIX}:
