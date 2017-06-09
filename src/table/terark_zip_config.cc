@@ -197,6 +197,19 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetInt   (tzo, terarkZipMinLevel       , 0    );
   MyGetInt   (tzo, debugLevel              , 0    );
   MyGetInt   (tzo, keyPrefixLen            , 0    );
+  MyGetInt   (tzo, offsetArrayBlockUnits   , 0    );
+  if (true
+      && 0   != tzo.offsetArrayBlockUnits
+      && 64  != tzo.offsetArrayBlockUnits
+      && 128 != tzo.offsetArrayBlockUnits
+  ){
+    STD_WARN(
+      "TerarkZipConfigFromEnv: bad offsetArrayBlockUnits = %d, must be one of {0,64,128}, reset to 128\n"
+      , tzo.offsetArrayBlockUnits
+    );
+    tzo.offsetArrayBlockUnits = 128;
+  }
+
   MyGetBool  (tzo, useSuffixArrayLocalMatch, false);
   MyGetBool  (tzo, warmUpIndexOnOpen       , true );
   MyGetBool  (tzo, warmUpValueOnOpen       , false);
@@ -244,7 +257,7 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
 void TerarkZipDBOptionsFromEnv(DBOptions& dbo) {
   MyGetInt(dbo, base_background_compactions, 3);
   MyGetInt(dbo,  max_background_compactions, 5);
-  MyGetInt(dbo,  max_background_flushes    , 2);
+  MyGetInt(dbo,  max_background_flushes    , 3);
   MyGetInt(dbo,  max_subcompactions        , 1);
 
   dbo.env->SetBackgroundThreads(dbo.max_background_compactions, rocksdb::Env::LOW);

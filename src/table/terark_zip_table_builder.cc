@@ -14,10 +14,6 @@
 
 namespace rocksdb {
 
-#ifdef TERARK_ZIP_TRIAL_VERSION
-const char g_trail_rand_delete[] = "TERARK_ZIP_TRIAL_VERSION random deleted this row";
-#endif
-
 using terark::SortableStrVec;
 using terark::byte_swap;
 
@@ -157,6 +153,7 @@ TerarkZipTableBuilder::createZipBuilder() const {
   DictZipBlobStore::Options dzopt;
   dzopt.entropyAlgo = DictZipBlobStore::Options::EntropyAlgo(table_options_.entropyAlgo);
   dzopt.checksumLevel = table_options_.checksumLevel;
+  dzopt.offsetArrayBlockUnits = table_options_.offsetArrayBlockUnits;
   dzopt.useSuffixArrayLocalMatch = table_options_.useSuffixArrayLocalMatch;
   return DictZipBlobStore::createZipBuilder(dzopt);
 }
@@ -202,16 +199,15 @@ TableProperties TerarkZipTableBuilder::GetTableProperties() const {
   return ret;
 }
 
-
 void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
-
   if (table_options_.debugLevel == 4) {
     rocksdb::ParsedInternalKey ikey;
     rocksdb::ParseInternalKey(key, &ikey);
     fprintf(tmpDumpFile_.fp(), "DEBUG: 1st pass => %s / %s \n", ikey.DebugString(true).c_str(), value.ToString(true).c_str());
   }
   DEBUG_PRINT_1ST_PASS_KEY(key);
-  ValueType value_type = ExtractValueType(key);
+  uint64_t seqType = DecodeFixed64(key.data() + key.size() - 8);
+  ValueType value_type = ValueType(seqType & 255);
   uint64_t offset = uint64_t((properties_.raw_key_size + properties_.raw_value_size)
     * table_options_.estimateCompressionRatio);
   if (IsValueType(value_type)) {
@@ -233,7 +229,7 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
         auto& keyStat = histogram_.back().stat;
         assert((prevUserKey_ < userKey) ^ isReverseBytewiseOrder_);
         keyStat.commonPrefixLen = fstring(prevUserKey_.data(), keyStat.commonPrefixLen)
-          .commonPrefixLen(userKey);
+               .commonPrefixLen(userKey);
         keyStat.minKeyLen = std::min(userKey.size(), keyStat.minKeyLen);
         keyStat.maxKeyLen = std::max(userKey.size(), keyStat.maxKeyLen);
         AddPrevUserKey();
@@ -260,7 +256,7 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
       prevUserKey_.assign(userKey);
     }
     valueBits_.push_back(true);
-    valueBuf_.emplace_back(key.data() + key_prefixLen_ + userKey.size(), 8);
+    valueBuf_.emplace_back((char*)&seqType, 8);
     valueBuf_.back_append(value.data(), value.size());
     if (!zbuilder_) {
       if (!value.empty() && randomGenerator_() < sampleUpperBound_) {
@@ -268,7 +264,7 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
         sampleLenSum_ += value.size();
       }
       if (!second_pass_iter_) {
-        tmpValueFile_.writer.ensureWrite(valueBuf_.back().first, 8);
+        tmpValueFile_.writer << seqType;
         tmpValueFile_.writer << fstringOf(value);
       }
     }
@@ -448,10 +444,12 @@ Status TerarkZipTableBuilder::Finish() {
 
       long long t1 = g_pf.now();
       histogram_[i].keyFileBegin = fileOffset;
-      factory->Build(tempKeyFileReader, table_options_, [&fileOffset, &writer](const void* data, size_t size) {
-        fileOffset += size;
-        writer.ensureWrite(data, size);
-      }, keyStat);
+      factory->Build(tempKeyFileReader, table_options_
+          , [&fileOffset, &writer](const void* data, size_t size) {
+              fileOffset += size;
+              writer.ensureWrite(data, size);
+            }
+          , keyStat);
       histogram_[i].keyFileEnd = fileOffset;
       assert((fileOffset - histogram_[i].keyFileBegin) % 8 == 0);
       long long tt = g_pf.now();
@@ -503,9 +501,6 @@ ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
   {
     t3 = g_pf.now();
     zbuilder = UniquePtrOf(this->createZipBuilder());
-#if defined(TERARK_ZIP_TRIAL_VERSION)
-    zbuilder->addSample(g_trail_rand_delete);
-#endif
     {
       valvec<byte_t> sample;
       NativeDataInput<InputBuffer> input(&tmpSampleFile_.fp);
@@ -566,16 +561,13 @@ void TerarkZipTableBuilder::DebugCleanup() {
 }
 
 void
-TerarkZipTableBuilder::BuilderWriteValues(NativeDataInput<InputBuffer>& input, 
+TerarkZipTableBuilder::BuilderWriteValues(NativeDataInput<InputBuffer>& input,
   KeyValueStatus& kvs, std::function<void(fstring)> write) {
   auto& bzvType = kvs.type;
   bzvType.resize(kvs.stat.numKeys);
   if (nullptr == second_pass_iter_)
   {
     valvec<byte_t> value;
-#if defined(TERARK_ZIP_TRIAL_VERSION)
-    valvec<byte_t> tmpValueBuf;
-#endif
     size_t entryId = 0;
     size_t bitPos = 0;
     for (size_t recId = 0; recId < kvs.stat.numKeys; recId++) {
@@ -588,14 +580,7 @@ TerarkZipTableBuilder::BuilderWriteValues(NativeDataInput<InputBuffer>& input,
       if (1 == oneSeqLen && (kTypeDeletion == vType || kTypeValue == vType)) {
         if (0 == seqNum && kTypeValue == vType) {
           bzvType.set0(recId, size_t(ZipValueType::kZeroSeq));
-#if defined(TERARK_ZIP_TRIAL_VERSION)
-          if (randomGenerator_() < randomGenerator_.max() / 1000) {
-            input >> tmpValueBuf;
-            value.assign(fstring(g_trail_rand_delete));
-          }
-          else
-#endif
-            input >> value;
+          input >> value;
         }
         else {
           if (kTypeValue == vType) {
@@ -686,12 +671,7 @@ TerarkZipTableBuilder::BuilderWriteValues(NativeDataInput<InputBuffer>& input,
         }
         if (0 == pikey.sequence && kTypeValue == pikey.type) {
           bzvType.set0(recId, size_t(ZipValueType::kZeroSeq));
-#if defined(TERARK_ZIP_TRIAL_VERSION)
-          if (randomGenerator_() < randomGenerator_.max() / 1000)
-            write(fstring(g_trail_rand_delete));
-          else
-#endif
-            write(fstringOf(curVal));
+          write(fstringOf(curVal));
         }
         else {
           if (kTypeValue == pikey.type) {
@@ -931,7 +911,8 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
     "    zip my value time = %7.2f's, unzip  length = %7.3f'GB\n"
     "    zip my value throughput = %7.3f'MB/sec\n"
     "    zip pipeline throughput = %7.3f'MB/sec\n"
-    "    entries = %zd  keys = %zd  avg-key = %.2f  avg-zkey = %.2f  avg-val = %.2f  avg-zval = %.2f\n"
+    "    entries = %zd  avg-key = %.2f  avg-zkey = %.2f  avg-val = %.2f  avg-zval = %.2f\n"
+    "    usrkeys = %zd  avg-key = %.2f  avg-zkey = %.2f  avg-val = %.2f  avg-zval = %.2f\n"
     "    UnZipSize{ index =%9.4f GB  value =%9.4f GB   all =%9.4f GB }\n"
     "    __ZipSize{ index =%9.4f GB  value =%9.4f GB   all =%9.4f GB }\n"
     "    UnZip/Zip{ index =%9.4f     value =%9.4f      all =%9.4f    }\n"
@@ -964,11 +945,17 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 , properties_.raw_value_size / dzstat.dictZipTime / 1e6
 , dzstat.pipelineThroughBytes / dzstat.dictZipTime / 1e6
 
-, size_t(properties_.num_entries), keyStat.numKeys
-, double(keyStat.sumKeyLen) / keyStat.numKeys
-, double(properties_.index_size) / keyStat.numKeys
+, size_t(properties_.num_entries)
+, double(properties_.raw_key_size)   / properties_.num_entries
+, double(properties_.index_size)     / properties_.num_entries
+, double(properties_.raw_value_size) / properties_.num_entries
+, double(properties_.data_size)      / properties_.num_entries
+
+, keyStat.numKeys
+, double(keyStat.sumKeyLen)          / keyStat.numKeys
+, double(properties_.index_size)     / keyStat.numKeys
 , double(properties_.raw_value_size) / keyStat.numKeys
-, double(properties_.data_size) / keyStat.numKeys
+, double(properties_.data_size)      / keyStat.numKeys
 
 , keyStat.sumKeyLen / 1e9, properties_.raw_value_size / 1e9, rawBytes / 1e9
 

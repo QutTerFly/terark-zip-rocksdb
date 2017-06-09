@@ -133,17 +133,20 @@ protected:
   ZipValueType            zValtype_;
   size_t                  valnum_;
   size_t                  validx_;
+  uint32_t                value_data_offset;
+  uint32_t                value_data_length;
   Status                  status_;
   PinnedIteratorsManager* pinned_iters_mgr_;
-  valvec<valvec<byte_t>>  pinned_buffer_;
 
 public:
   TerarkZipTableIterator(const TableReaderOptions& tro
-    , const TerarkZipSubReader *subReader
-    , SequenceNumber global_seqno)
+                       , const TerarkZipSubReader* subReader
+                       , const ReadOptions& ro
+                       , SequenceNumber global_seqno)
     : table_reader_options_(&tro)
     , subReader_(subReader)
-    , global_seqno_(global_seqno) {
+    , global_seqno_(global_seqno)
+  {
     if (subReader_ != nullptr) {
       iter_.reset(subReader_->index_->NewIterator());
       iter_->SetInvalid();
@@ -155,12 +158,11 @@ public:
     pInterKey_.user_key = Slice();
     pInterKey_.sequence = uint64_t(-1);
     pInterKey_.type = kMaxValue;
+    value_data_offset = ro.value_data_offset;
+    value_data_length = ro.value_data_length;
   }
 
   void SetPinnedItersMgr(PinnedIteratorsManager* pinned_iters_mgr) {
-    if (pinned_iters_mgr_ && pinned_iters_mgr_ != pinned_iters_mgr) {
-      pinned_buffer_.clear();
-    }
     pinned_iters_mgr_ = pinned_iters_mgr;
   }
 
@@ -181,10 +183,6 @@ public:
     }
   }
 
-  void SeekForPrev(const Slice& target) override {
-    SeekForPrevImpl(target, &table_reader_options_->internal_comparator);
-  }
-
   void Seek(const Slice& target) override {
     ParsedInternalKey pikey;
     if (!ParseInternalKey(target, &pikey)) {
@@ -196,77 +194,8 @@ public:
     SeekInternal(pikey);
   }
 
-  void SeekInternal(const ParsedInternalKey& pikey) {
-    TryPinBuffer(interKeyBuf_xx_);
-    // Damn MySQL-rocksdb may use "rev:" comparator
-    size_t cplen = fstringOf(pikey.user_key).commonPrefixLen(subReader_->commonPrefix_);
-    if (subReader_->commonPrefix_.size() != cplen) {
-      if (pikey.user_key.size() == cplen) {
-        assert(pikey.user_key.size() < subReader_->commonPrefix_.size());
-        if (reverse) {
-          SeekToLast();
-          this->Next(); // move  to EOF
-          assert(!this->Valid());
-        }
-        else {
-          SeekToFirst();
-        }
-      }
-      else {
-        assert(pikey.user_key.size() > cplen);
-        assert(pikey.user_key[cplen] != subReader_->commonPrefix_[cplen]);
-        if ((byte_t(pikey.user_key[cplen]) < subReader_->commonPrefix_[cplen]) ^ reverse) {
-          SeekToFirst();
-        }
-        else {
-          SeekToLast();
-          this->Next(); // move  to EOF
-          assert(!this->Valid());
-        }
-      }
-    }
-    else {
-      bool ok;
-      int cmp; // compare(iterKey, searchKey)
-      ok = iter_->Seek(fstringOf(pikey.user_key).substr(cplen));
-      if (reverse) {
-        if (!ok) {
-          // searchKey is reverse_bytewise less than all keys in database
-          iter_->SeekToLast();
-          ok = iter_->Valid();
-          cmp = -1;
-        }
-        else if ((cmp = SliceOf(iter_->key()).compare(SubStr(pikey.user_key, cplen))) != 0) {
-          assert(cmp > 0);
-          iter_->Prev();
-          ok = iter_->Valid();
-        }
-      }
-      else {
-        cmp = 0;
-        if (ok) {
-          cmp = SliceOf(iter_->key()).compare(SubStr(pikey.user_key, cplen));
-        }
-      }
-      if (UnzipIterRecord(ok)) {
-        if (0 == cmp) {
-          validx_ = size_t(-1);
-          do {
-            validx_++;
-            DecodeCurrKeyValue();
-            if (pInterKey_.sequence <= pikey.sequence) {
-              return; // done
-            }
-          } while (validx_ + 1 < valnum_);
-          // no visible version/sequence for target, use Next();
-          // if using Next(), version check is not needed
-          Next();
-        }
-        else {
-          DecodeCurrKeyValue();
-        }
-      }
-    }
+  void SeekForPrev(const Slice& target) override {
+    SeekForPrevImpl(target, &table_reader_options_->internal_comparator);
   }
 
   void Next() override {
@@ -318,9 +247,96 @@ public:
   }
 
 protected:
-  virtual void SetIterInvalid() {
+  void SeekToAscendingFirst() {
+    if (UnzipIterRecord(iter_->SeekToFirst())) {
+      if (reverse)
+        validx_ = valnum_ - 1;
+      DecodeCurrKeyValue();
+    }
+  }
+  void SeekToAscendingLast() {
+    if (UnzipIterRecord(iter_->SeekToLast())) {
+      if (!reverse)
+        validx_ = valnum_ - 1;
+      DecodeCurrKeyValue();
+    }
+  }
+  void SeekInternal(const ParsedInternalKey& pikey) {
     TryPinBuffer(interKeyBuf_xx_);
-    iter_->SetInvalid();
+    // Damn MySQL-rocksdb may use "rev:" comparator
+    size_t cplen = fstringOf(pikey.user_key).commonPrefixLen(subReader_->commonPrefix_);
+    if (subReader_->commonPrefix_.size() != cplen) {
+      if (pikey.user_key.size() == cplen) {
+        assert(pikey.user_key.size() < subReader_->commonPrefix_.size());
+        if (reverse)
+          SetIterInvalid();
+        else
+          SeekToAscendingFirst();
+      }
+      else {
+        assert(pikey.user_key.size() > cplen);
+        assert(pikey.user_key[cplen] != subReader_->commonPrefix_[cplen]);
+        if ((byte_t(pikey.user_key[cplen]) < subReader_->commonPrefix_[cplen]) ^ reverse) {
+          if (reverse)
+            SeekToAscendingLast();
+          else
+            SeekToAscendingFirst();
+        }
+        else {
+          SetIterInvalid();
+        }
+      }
+    }
+    else {
+      bool ok;
+      int cmp; // compare(iterKey, searchKey)
+      ok = iter_->Seek(fstringOf(pikey.user_key).substr(cplen));
+      if (reverse) {
+        if (!ok) {
+          // searchKey is reverse_bytewise less than all keys in database
+          iter_->SeekToLast();
+          assert(iter_->Valid()); // TerarkIndex should not empty
+          ok = true;
+          cmp = -1;
+        }
+        else {
+          cmp = SliceOf(iter_->key()).compare(SubStr(pikey.user_key, cplen));
+          if (cmp != 0) {
+            assert(cmp > 0);
+            iter_->Prev();
+            ok = iter_->Valid();
+          }
+        }
+      }
+      else {
+        cmp = 0;
+        if (ok)
+          cmp = SliceOf(iter_->key()).compare(SubStr(pikey.user_key, cplen));
+      }
+      if (UnzipIterRecord(ok)) {
+        if (0 == cmp) {
+          validx_ = size_t(-1);
+          do {
+            validx_++;
+            DecodeCurrKeyValue();
+            if (pInterKey_.sequence <= pikey.sequence) {
+              return; // done
+            }
+          } while (validx_ + 1 < valnum_);
+          // no visible version/sequence for target, use Next();
+          // if using Next(), version check is not needed
+          Next();
+        }
+        else {
+          DecodeCurrKeyValue();
+        }
+      }
+    }
+  }
+  void SetIterInvalid() {
+    TryPinBuffer(interKeyBuf_xx_);
+    if (iter_)
+      iter_->SetInvalid();
     validx_ = 0;
     valnum_ = 0;
     pInterKey_.user_key = Slice();
@@ -363,8 +379,8 @@ protected:
   }
   void TryPinBuffer(valvec<byte_t>& buf) {
     if (pinned_iters_mgr_ && pinned_iters_mgr_->PinningEnabled()) {
-      pinned_buffer_.push_back();
-      pinned_buffer_.back().swap(buf);
+      pinned_iters_mgr_->PinPtr(buf.data(), free);
+      buf.risk_release_ownership();
     }
   }
   bool UnzipIterRecord(bool hasRecord) {
@@ -377,11 +393,17 @@ protected:
         TryPinBuffer(valueBuf_);
         if (ZipValueType::kMulti == zValtype_) {
           valueBuf_.resize_no_init(sizeof(uint32_t)); // for offsets[valnum_]
+          subReader_->store_->get_record_append(recId, &valueBuf_);
+        }
+        else if (0 == value_data_offset && UINT32_MAX == value_data_length) {
+          valueBuf_.erase_all();
+          subReader_->store_->get_record_append(recId, &valueBuf_);
         }
         else {
           valueBuf_.erase_all();
+          subReader_->store_->get_slice_append(recId,
+              value_data_offset, value_data_length, &valueBuf_);
         }
-        subReader_->store_->get_record_append(recId, &valueBuf_);
       }
       catch (const BadCrc32cException& ex) { // crc checksum error
         SetIterInvalid();
@@ -391,6 +413,25 @@ protected:
       }
       if (ZipValueType::kMulti == zValtype_) {
         ZipValueMultiValue::decode(valueBuf_, &valnum_);
+        size_t rvOffset = value_data_offset;
+        size_t rvLength = value_data_length;
+        if (rvOffset || rvLength < UINT32_MAX) {
+            uint32_t* offsets = (uint32_t*)valueBuf_.data();
+            size_t pos = 0;
+            char* base = (char*)(offsets + valnum_ + 1);
+            for(size_t i = 0; i < valnum_; ++i) {
+                size_t q = offsets[i + 0];
+                size_t r = offsets[i + 1];
+                size_t l = r - q;
+                offsets[i] = pos;
+                if (l > rvOffset) {
+                    size_t l2 = std::min(l - rvOffset, rvLength);
+                    memmove(base + pos, base + q + rvOffset, l2);
+                    pos += l2;
+                }
+            }
+            offsets[valnum_] = pos;
+        }
       }
       else {
         valnum_ = 1;
@@ -509,7 +550,7 @@ LoadTombstone(RandomAccessFileReader * file, uint64_t file_size) {
   return s;
 }
 
-InternalIterator *TerarkZipTableTombstone::
+InternalIterator* TerarkZipTableTombstone::
 NewRangeTombstoneIterator(const ReadOptions & read_options) {
   if (tombstone_) {
     auto iter = tombstone_->NewIterator(
@@ -522,7 +563,6 @@ NewRangeTombstoneIterator(const ReadOptions & read_options) {
   }
   return nullptr;
 }
-
 
 Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& ro, const Slice& ikey,
   GetContext* get_context, int flag) const {
@@ -542,38 +582,49 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
     user_key = Slice(reinterpret_cast<const char*>(&u64_target), 8);
   }
 #endif
+  assert(user_key.starts_with(prefix_));
+  user_key.remove_prefix(prefix_.size());
   size_t cplen = user_key.difference_offset(commonPrefix_);
   if (commonPrefix_.size() != cplen) {
     return Status::OK();
   }
-  assert(user_key.size() > prefix_.size());
-  size_t recId = index_->Find(fstringOf(user_key).substr(cplen + prefix_.size()));
+  size_t recId = index_->Find(fstringOf(user_key).substr(cplen));
   if (size_t(-1) == recId) {
     return Status::OK();
   }
   auto zvType = type_.size()
     ? ZipValueType(type_[recId])
     : ZipValueType::kZeroSeq;
-  if (ZipValueType::kMulti == zvType) {
-    g_tbuf.resize_no_init(sizeof(uint32_t));
-  }
-  else {
-    g_tbuf.erase_all();
-  }
-  try {
-    store_->get_record_append(recId, &g_tbuf);
-  }
-  catch (const terark::BadChecksumException& ex) {
-    return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
-  }
   switch (zvType) {
   default:
     return Status::Aborted("TerarkZipTableReader::Get()", "Bad ZipValueType");
   case ZipValueType::kZeroSeq:
+    g_tbuf.erase_all();
+    try {
+      if (0==ro.value_data_offset && UINT32_MAX==ro.value_data_length)
+        store_->get_record_append(recId, &g_tbuf);
+      else // get_slice_append does not support entropy zip
+        store_->get_slice_append(recId,
+          ro.value_data_offset, ro.value_data_length, &g_tbuf);
+    }
+    catch (const terark::BadChecksumException& ex) {
+      return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
+    }
     get_context->SaveValue(ParsedInternalKey(pikey.user_key, global_seqno, kTypeValue),
       Slice((char*)g_tbuf.data(), g_tbuf.size()));
     break;
   case ZipValueType::kValue: { // should be a kTypeValue, the normal case
+    g_tbuf.erase_all();
+    try {
+      if (0==ro.value_data_offset && UINT32_MAX==ro.value_data_length)
+        store_->get_record_append(recId, &g_tbuf);
+      else // get_slice_append does not support entropy zip
+        store_->get_slice_append(recId,
+          ro.value_data_offset, ro.value_data_length, &g_tbuf);
+    }
+    catch (const terark::BadChecksumException& ex) {
+      return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
+    }
                                // little endian uint64_t
     uint64_t seq = *(uint64_t*)g_tbuf.data() & kMaxSequenceNumber;
     if (seq <= pikey.sequence) {
@@ -590,8 +641,19 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
     }
     break; }
   case ZipValueType::kMulti: { // more than one value
+    g_tbuf.resize_no_init(sizeof(uint32_t));
+    try {
+      store_->get_record_append(recId, &g_tbuf);
+    }
+    catch (const terark::BadChecksumException& ex) {
+      return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
+    }
     size_t num = 0;
     auto mVal = ZipValueMultiValue::decode(g_tbuf, &num);
+    const size_t rvOffset = ro.value_data_offset;
+    const size_t rvLength = ro.value_data_length;
+    const size_t lenLimit = rvLength < UINT32_MAX
+                          ? rvOffset + rvLength : size_t(-1);
     for (size_t i = 0; i < num; ++i) {
       Slice val = mVal->getValueData(i, num);
       SequenceNumber sn;
@@ -603,6 +665,12 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
       if (sn <= pikey.sequence) {
         val.remove_prefix(sizeof(SequenceNumber));
         // only kTypeMerge will return true
+        if (val.size_ > lenLimit) {
+            val.size_ = rvLength;
+            val.data_ += rvOffset;
+        } else {
+            val.remove_prefix(rvOffset);
+        }
         bool hasMoreValue = get_context->SaveValue(
           ParsedInternalKey(pikey.user_key, sn, valtype), val);
         if (!hasMoreValue) {
@@ -797,19 +865,19 @@ NewIterator(const ReadOptions& ro, Arena* arena, bool skip_filters) {
   if (isReverseBytewiseOrder_) {
     if (arena) {
       return new(arena->AllocateAligned(sizeof(TerarkZipTableIterator<true>)))
-        TerarkZipTableIterator<true>(table_reader_options_, &subReader_, global_seqno_);
+        TerarkZipTableIterator<true>(table_reader_options_, &subReader_, ro, global_seqno_);
     }
     else {
-      return new TerarkZipTableIterator<true>(table_reader_options_, &subReader_, global_seqno_);
+      return new TerarkZipTableIterator<true>(table_reader_options_, &subReader_, ro, global_seqno_);
     }
   }
   else {
     if (arena) {
       return new(arena->AllocateAligned(sizeof(TerarkZipTableIterator<false>)))
-        TerarkZipTableIterator<false>(table_reader_options_, &subReader_, global_seqno_);
+        TerarkZipTableIterator<false>(table_reader_options_, &subReader_, ro, global_seqno_);
     }
     else {
-      return new TerarkZipTableIterator<false>(table_reader_options_, &subReader_, global_seqno_);
+      return new TerarkZipTableIterator<false>(table_reader_options_, &subReader_, ro, global_seqno_);
     }
   }
 }
@@ -817,7 +885,7 @@ NewIterator(const ReadOptions& ro, Arena* arena, bool skip_filters) {
 
 Status
 TerarkZipTableReader::Get(const ReadOptions& ro, const Slice& ikey,
-  GetContext* get_context, bool skip_filters) {
+                          GetContext* get_context, bool skip_filters) {
   int flag = skip_filters ? TerarkZipSubReader::FlagSkipFilter : TerarkZipSubReader::FlagNone;
 #if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
   if (isUint64Comparator_) {
