@@ -39,12 +39,12 @@ struct TerarkIndexHeader {
 
 TerarkIndex::AutoRegisterFactory::AutoRegisterFactory(
     std::initializer_list<const char*> names,
-    const char* riit_name,
+    const char* rtti_name,
     Factory* factory) {
   for (const char* name : names) {
 //  STD_INFO("AutoRegisterFactory: %s\n", name);
     g_TerarkIndexFactroy.insert_i(name, FactoryPtr(factory));
-    g_TerarkIndexName.insert_i(riit_name, *names.begin());
+    g_TerarkIndexName.insert_i(rtti_name, *names.begin());
   }
 }
 
@@ -103,6 +103,10 @@ class NestLoudsTrieIndex : public TerarkIndex {
   };
 public:
   NestLoudsTrieIndex(NLTrie* trie) : m_trie(trie) {}
+  const char* Name() const override {
+    auto header = (const TerarkIndexHeader*)m_trie->get_mmap().data();
+    return header->class_name;
+  }
   size_t Find(fstring key) const override final {
     MY_THREAD_LOCAL(terark::MatchContext, ctx);
     ctx.root = 0;

@@ -203,7 +203,8 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
   if (table_options_.debugLevel == 4) {
     rocksdb::ParsedInternalKey ikey;
     rocksdb::ParseInternalKey(key, &ikey);
-    fprintf(tmpDumpFile_.fp(), "DEBUG: 1st pass => %s / %s \n", ikey.DebugString(true).c_str(), value.ToString(true).c_str());
+    fprintf(tmpDumpFile_, "DEBUG: 1st pass => %s / %s \n",
+        ikey.DebugString(true).c_str(), value.ToString(true).c_str());
   }
   DEBUG_PRINT_1ST_PASS_KEY(key);
   uint64_t seqType = DecodeFixed64(key.data() + key.size() - 8);
@@ -493,7 +494,7 @@ ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
   AutoDeleteFile tmpStoreFile{tmpValueFile_.path + ".zbs"};
   NativeDataInput<InputBuffer> input(&tmpValueFile_.fp);
   auto& kvs = histogram_.front();
-  fstring dictMem;
+  BlobStore::Dictionary dict;
   std::unique_ptr<DictZipBlobStore::ZipBuilder> zbuilder;
   std::unique_ptr<terark::BlobStore> store;
   DictZipBlobStore::ZipStat dzstat;
@@ -541,12 +542,12 @@ ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
     dzstat = zbuilder->getZipStat();
 
     t4 = g_pf.now();
-    dictMem = zbuilder->getDictMem();
+    dict = zbuilder->getDictionary();
   }
   DebugCleanup();
   // wait for indexing complete, if indexing is slower than value compressing
   waitIndex();
-  return WriteSSTFile(t3, t4, tmpIndexFile, store.get(), dictMem, dzstat);
+  return WriteSSTFile(t3, t4, tmpIndexFile, store.get(), dict, dzstat);
 }
 
 
@@ -744,6 +745,10 @@ Status TerarkZipTableBuilder::WriteStore(TerarkIndex* index, terark::BlobStore* 
   , long long& t5, long long& t6, long long& t7) {
   auto& keyStat = kvs.stat;
   auto& bzvType = kvs.type;
+  INFO(ioptions_.info_log
+      , "TerarkZipTableBuilder::Finish():this=%p:  index type = %-32s, store type = %-20s\n"
+      , this, index->Name(), store->name()
+  );
   if (index->NeedsReorder()) {
     bitfield_array<2> zvType2(keyStat.numKeys);
     terark::AutoFree<uint32_t> newToOld(keyStat.numKeys, UINT32_MAX);
@@ -815,14 +820,14 @@ Status TerarkZipTableBuilder::WriteStore(TerarkIndex* index, terark::BlobStore* 
 
 Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
   , fstring tmpIndexFile, terark::BlobStore* zstore
-  , fstring dictMem
+  , terark::BlobStore::Dictionary dict
   , const DictZipBlobStore::ZipStat& dzstat)
 {
   assert(histogram_.size() == 1);
   auto& kvs = histogram_.front();
   auto& keyStat = kvs.stat;
   auto& bzvType = kvs.type;
-  const size_t realsampleLenSum = dictMem.size();
+  const size_t realsampleLenSum = dict.memory.size();
   long long rawBytes = properties_.raw_key_size + properties_.raw_value_size;
   long long t5 = g_pf.now();
   unique_ptr<TerarkIndex> index(TerarkIndex::LoadFile(tmpIndexFile));
@@ -859,7 +864,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
   commonPrefix.append((const char*)prevUserKey_.data(), keyStat.commonPrefixLen);
   WriteBlock(commonPrefix, file_, &offset_, &commonPrefixBlock);
   properties_.data_size = dataBlock.size();
-  s = WriteBlock(dictMem, file_, &offset_, &dictBlock);
+  s = WriteBlock(dict.memory, file_, &offset_, &dictBlock);
   if (!s.ok()) {
     return s;
   }
@@ -885,7 +890,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
   range_del_block_.Reset();
   properties_.index_size = indexBlock.size();
   WriteMetaData({
-    { dictMem.size() ? &kTerarkZipTableValueDictBlock : NULL       , dictBlock         },
+    { dict.memory.size() ? &kTerarkZipTableValueDictBlock : NULL   , dictBlock         },
     { &kTerarkZipTableIndexBlock                                   , indexBlock        },
     { !zvTypeBlock.IsNull() ? &kTerarkZipTableValueTypeBlock : NULL, zvTypeBlock       },
     { &kTerarkZipTableCommonPrefixBlock                            , commonPrefixBlock },
@@ -1043,8 +1048,7 @@ Status TerarkZipTableBuilder::OfflineFinish() {
     , "TerarkZipTableBuilder::Finish():this=%p:  index pass time =%7.2f's, %8.3f'MB/sec\n"
     , this, g_pf.sf(t1, tt), properties_.raw_key_size*1.0 / g_pf.uf(t1, tt)
   );
-  fstring dictMem = zstore->get_dict();
-  return WriteSSTFile(t1, tt, tmpIndexFile, zstore.get(), dictMem, dzstat);
+  return WriteSSTFile(t1, tt, tmpIndexFile, zstore.get(), zstore->get_dict(), dzstat);
 }
 
 void TerarkZipTableBuilder::Abandon() {
@@ -1135,4 +1139,14 @@ void TerarkZipTableBuilder::UpdateValueLenHistogram() {
 }
 
 
+TableBuilder*
+createTerarkZipTableBuilder(const TerarkZipTableOptions& tzo,
+                            const TableBuilderOptions&   tbo,
+                            uint32_t                     column_family_id,
+                            WritableFileWriter*          file,
+                            size_t                       key_prefixLen)
+{
+    return new TerarkZipTableBuilder(tzo, tbo, column_family_id, file, key_prefixLen);
 }
+
+} // namespace
