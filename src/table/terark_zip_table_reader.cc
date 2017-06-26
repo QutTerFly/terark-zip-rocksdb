@@ -71,7 +71,7 @@ Block* DetachBlockContents(BlockContents &tombstoneBlock, SequenceNumber global_
     size_t sz = terark::align_down(
       tombstoneBlock.data.size() - (aligned_ptr - ptr), 4096);
     if (sz > 0) {
-      madvise((void*)aligned_ptr, sz, MADV_DONTNEED);
+        posix_madvise((void*)aligned_ptr, sz, POSIX_MADV_DONTNEED);
     }
   }
 #endif
@@ -109,11 +109,16 @@ static void MmapWarmUp(const Vec& uv) {
 }
 
 static void MmapColdizeBytes(const void* addr, size_t len) {
+	size_t low = terark::align_up(size_t(addr), 4096);
+	size_t hig = terark::align_down(size_t(addr) + len, 4096);
+	if (low < hig) {
+		size_t size = hig - low;
 #ifdef POSIX_MADV_DONTNEED
-    auto base = (const byte_t*)(uintptr_t(addr) & uintptr_t(~4095));
-    auto size = terark::align_up((size_t(addr) & 4095) + len, 4096);
-    posix_madvise((void*)base, size, POSIX_MADV_DONTNEED);
+		posix_madvise((void*)low, size, POSIX_MADV_DONTNEED);
+#elif defined(_MSC_VER) // defined(_WIN32) || defined(_WIN64)
+		VirtualFree((void*)low, size, MEM_DECOMMIT);
 #endif
+	}
 }
 static void MmapColdize(fstring mem) {
     MmapColdizeBytes(mem.data(), mem.size());
