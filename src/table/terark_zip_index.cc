@@ -13,12 +13,14 @@ namespace rocksdb {
 using terark::initial_state;
 using terark::BaseDFA;
 using terark::NestLoudsTrieDAWG_SE_512;
+using terark::NestLoudsTrieDAWG_SE_512_64;
 using terark::NestLoudsTrieDAWG_IL_256;
 using terark::NestLoudsTrieDAWG_Mixed_SE_512;
 using terark::NestLoudsTrieDAWG_Mixed_IL_256;
 using terark::NestLoudsTrieDAWG_Mixed_XL_256;
 using terark::SortableStrVec;
 using terark::MmapWholeFile;
+using terark::UintVecMin0;
 
 static terark::hash_strmap<TerarkIndex::FactoryPtr> g_TerarkIndexFactroy;
 static terark::hash_strmap<std::string>             g_TerarkIndexName;
@@ -59,6 +61,9 @@ const TerarkIndex::Factory* TerarkIndex::GetFactory(fstring name) {
 
 const TerarkIndex::Factory*
 TerarkIndex::SelectFactory(const KeyStat& ks, fstring name) {
+  if (ks.numKeys > (1ull << 30) || ks.sumKeyLen - ks.numKeys * ks.commonPrefixLen > (15ull << 30)) {
+    return GetFactory("SE_512_64");
+  }
   return GetFactory(name);
 }
 
@@ -125,12 +130,12 @@ public:
     return new MyIterator(m_trie.get());
   }
   bool NeedsReorder() const override final { return true; }
-  void GetOrderMap(uint32_t* newToOld)
+  void GetOrderMap(UintVecMin0& newToOld)
   const override final {
     terark::NonRecursiveDictionaryOrderToStateMapGenerator gen;
     gen(*m_trie, [&](size_t dictOrderOldId, size_t state) {
       size_t newId = m_trie->state_to_word_id(state);
-      newToOld[newId] = uint32_t(dictOrderOldId);
+      newToOld.set_wire(newId, dictOrderOldId);
     });
   }
   void BuildCache(double cacheRatio) {
@@ -236,11 +241,13 @@ public:
 typedef NestLoudsTrieDAWG_IL_256 NestLoudsTrieDAWG_IL_256_32;
 typedef NestLoudsTrieDAWG_SE_512 NestLoudsTrieDAWG_SE_512_32;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_SE_512_32> TerocksIndex_NestLoudsTrieDAWG_SE_512_32;
+typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_SE_512_64> TerocksIndex_NestLoudsTrieDAWG_SE_512_64;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_IL_256_32> TerocksIndex_NestLoudsTrieDAWG_IL_256_32;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_Mixed_SE_512> TerocksIndex_NestLoudsTrieDAWG_Mixed_SE_512;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_Mixed_IL_256> TerocksIndex_NestLoudsTrieDAWG_Mixed_IL_256;
 typedef NestLoudsTrieIndex<NestLoudsTrieDAWG_Mixed_XL_256> TerocksIndex_NestLoudsTrieDAWG_Mixed_XL_256;
 TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_SE_512_32, "NestLoudsTrieDAWG_SE_512", "SE_512_32", "SE_512");
+TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_SE_512_64, "NestLoudsTrieDAWG_SE_512_64", "SE_512_64", "SE_512");
 TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_IL_256_32, "NestLoudsTrieDAWG_IL_256", "IL_256_32", "IL_256", "NestLoudsTrieDAWG_IL");
 TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_SE_512, "NestLoudsTrieDAWG_Mixed_SE_512", "Mixed_SE_512");
 TerarkIndexRegister(TerocksIndex_NestLoudsTrieDAWG_Mixed_IL_256, "NestLoudsTrieDAWG_Mixed_IL_256", "Mixed_IL_256");

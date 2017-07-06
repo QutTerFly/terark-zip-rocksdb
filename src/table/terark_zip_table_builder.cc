@@ -16,7 +16,7 @@ namespace rocksdb {
 
 using terark::SortableStrVec;
 using terark::byte_swap;
-
+using terark::UintVecMin0;
 
 std::mutex g_sumMutex;
 size_t g_sumKeyLen = 0;
@@ -738,7 +738,7 @@ TerarkZipTableBuilder::BuilderWriteValues(NativeDataInput<InputBuffer>& input,
 }
 
 Status TerarkZipTableBuilder::WriteStore(TerarkIndex* index, terark::BlobStore* store
-  , KeyValueStatus& kvs, std::function<void(const void*, size_t)> writeAppend
+  , KeyValueStatus& kvs
   , BlockHandle& dataBlock
   , long long& t5, long long& t6, long long& t7) {
   auto& keyStat = kvs.stat;
@@ -747,23 +747,26 @@ Status TerarkZipTableBuilder::WriteStore(TerarkIndex* index, terark::BlobStore* 
       , "TerarkZipTableBuilder::Finish():this=%p:  index type = %-32s, store type = %-20s\n"
       , this, index->Name(), store->name()
   );
+  using namespace std::placeholders;
+  auto writeAppend = std::bind(&TerarkZipTableBuilder::DoWriteAppend, this, _1, _2);
+  size_t maxUintVecVal = keyStat.numKeys - 1;
   if (index->NeedsReorder()) {
     bitfield_array<2> zvType2(keyStat.numKeys);
-    terark::AutoFree<uint32_t> newToOld(keyStat.numKeys, UINT32_MAX);
-    index->GetOrderMap(newToOld.p);
+    UintVecMin0 newToOld(keyStat.numKeys, maxUintVecVal);
+    index->GetOrderMap(newToOld);
     t6 = g_pf.now();
     if (fstring(ioptions_.user_comparator->Name()).startsWith("rev:")) {
       // Damn reverse bytewise order
       for (size_t newId = 0; newId < keyStat.numKeys; ++newId) {
-        size_t dictOrderOldId = newToOld.p[newId];
+        size_t dictOrderOldId = newToOld[newId];
         size_t reverseOrderId = keyStat.numKeys - dictOrderOldId - 1;
-        newToOld.p[newId] = reverseOrderId;
+        newToOld.set_wire(newId, reverseOrderId);
         zvType2.set0(newId, bzvType[reverseOrderId]);
       }
     }
     else {
       for (size_t newId = 0; newId < keyStat.numKeys; ++newId) {
-        size_t dictOrderOldId = newToOld.p[newId];
+        size_t dictOrderOldId = newToOld[newId];
         zvType2.set0(newId, bzvType[dictOrderOldId]);
       }
     }
@@ -782,11 +785,11 @@ Status TerarkZipTableBuilder::WriteStore(TerarkIndex* index, terark::BlobStore* 
   else {
     if (fstring(ioptions_.user_comparator->Name()).startsWith("rev:")) {
       bitfield_array<2> zvType2(keyStat.numKeys);
-      terark::AutoFree<uint32_t> newToOld(keyStat.numKeys);
+      UintVecMin0 newToOld(keyStat.numKeys, maxUintVecVal);
       t6 = g_pf.now();
       for (size_t newId = 0, oldId = keyStat.numKeys - 1; newId < keyStat.numKeys;
         ++newId, --oldId) {
-        newToOld.p[newId] = oldId;
+        newToOld.set_wire(newId, oldId);
         zvType2.set0(newId, bzvType[oldId]);
       }
       t7 = g_pf.now();
@@ -814,6 +817,14 @@ Status TerarkZipTableBuilder::WriteStore(TerarkIndex* index, terark::BlobStore* 
     }
   }
   return Status::OK();
+}
+
+void TerarkZipTableBuilder::DoWriteAppend(const void* data, size_t size) {
+  Status s = file_->Append(Slice((const char*)data, size));
+  if (!s.ok()) {
+    throw s;
+  }
+  offset_ += size;
 }
 
 Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
@@ -845,14 +856,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
   }
   long long t6, t7;
   offset_ = 0;
-  auto writeAppend = [&](const void* data, size_t size) {
-    s = file_->Append(Slice((const char*)data, size));
-    if (!s.ok()) {
-      throw s;
-    }
-    offset_ += size;
-  };
-  s = WriteStore(index.get(), zstore, kvs, writeAppend, dataBlock, t5, t6, t7);
+  s = WriteStore(index.get(), zstore, kvs, dataBlock, t5, t6, t7);
   if (!s.ok()) {
     return s;
   }
@@ -1035,11 +1039,11 @@ Status TerarkZipTableBuilder::OfflineFinish() {
     }
     NativeDataInput<InputBuffer> tempKeyFileReader(&tmpKeyFile_.fp);
     FileStream writer(tmpIndexFile, "wb+");
-    factory->Build(tempKeyFileReader, table_options_, [&writer](const void* data, size_t size) {
-      writer.ensureWrite(data, size);
-    }, kvs.stat);
-
-
+    factory->Build(tempKeyFileReader, table_options_,
+      [&writer](const void* data, size_t size) {
+        writer.ensureWrite(data, size);
+      },
+      kvs.stat);
   }
   long long tt = g_pf.now();
   INFO(ioptions_.info_log
