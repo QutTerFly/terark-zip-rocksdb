@@ -141,7 +141,7 @@ override CXXFLAGS += ${extf}
 #CXXFLAGS += -fnothrow-opt
 
 override INCS += -I/opt/include
-override LIBS += -L/opt/lib -lcrypto
+override LIBS += -L/opt/lib -Wl,-Bstatic -lcrypto -Wl,-Bdynamic
 
 ifeq (, ${prefix})
 	ifeq (root, ${USER})
