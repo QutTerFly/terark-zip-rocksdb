@@ -84,8 +84,23 @@ private:
   void AddPrevUserKey(bool finish = false);
   void OfflineZipValueData();
   void UpdateValueLenHistogram();
+  struct WaitHandle : boost::noncopyable {
+    WaitHandle();
+    WaitHandle(size_t);
+    WaitHandle(WaitHandle&&);
+    WaitHandle& operator = (WaitHandle&&);
+    size_t myWorkMem;
+    void Release(size_t size = 0);
+    ~WaitHandle();
+  };
+  WaitHandle WaitForMemory(const char* who, size_t memorySize);
   Status EmptyTableFinish();
   Status OfflineFinish();
+  struct BuildStoreParams {
+    NativeDataInput<InputBuffer>& input;
+    KeyValueStatus& kvs;
+    WaitHandle handle;
+  };
   Status ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex);
   void DebugPrepare();
   void DebugCleanup();
@@ -97,8 +112,9 @@ private:
     , BlockHandle& dataBlock
     , long long& t5, long long& t6, long long& t7);
   Status WriteSSTFile(long long t3, long long t4
-    , fstring tmpIndexFile, terark::BlobStore* zstore
-    , terark::BlobStore::Dictionary dict
+    , fstring tmpIndexFile
+    , fstring tmpStoreFile
+    , fstring tmpDictFile
     , const DictZipBlobStore::ZipStat& dzstat);
   Status WriteMetaData(std::initializer_list<std::pair<const std::string*, BlockHandle> > blocks);
   DictZipBlobStore::ZipBuilder* createZipBuilder() const;
