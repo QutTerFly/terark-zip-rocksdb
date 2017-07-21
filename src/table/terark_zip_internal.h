@@ -13,6 +13,7 @@
 // project headers
 #include "terark_zip_table.h"
 // std headers
+#include <deque>
 #include <mutex>
 // rocksdb headers
 #include <rocksdb/slice.h>

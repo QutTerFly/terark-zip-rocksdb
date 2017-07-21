@@ -10,7 +10,6 @@
 #include <table/meta_blocks.h>
 // terark headers
 #include <terark/util/sortable_strvec.hpp>
-#include <terark/zbs/zero_length_blob_store.hpp>
 
 
 namespace rocksdb {
@@ -78,6 +77,7 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   , ioptions_(tbo.ioptions)
   , range_del_block_(1)
   , key_prefixLen_(key_prefixLen)
+  , level_(tbo.level)
 {
   properties_.fixed_key_len = 0;
   properties_.num_data_blocks = 1;
@@ -310,10 +310,10 @@ TerarkZipTableBuilder::WaitHandle& TerarkZipTableBuilder::WaitHandle::operator =
 }
 void TerarkZipTableBuilder::WaitHandle::Release(size_t size) {
   assert(size <= myWorkMem);
-  if (size == 0) {
-    size = myWorkMem;
-  }
   if (myWorkMem > 0) {
+    if (size == 0) {
+      size = myWorkMem;
+    }
     std::unique_lock<std::mutex> zipLock(zipMutex);
     assert(sumWorkingMem >= myWorkMem);
     sumWorkingMem -= size;
@@ -509,6 +509,46 @@ Status TerarkZipTableBuilder::Finish() {
 }
 
 
+TerarkZipTableBuilder::WaitHandle
+TerarkZipTableBuilder::
+LoadSample(std::unique_ptr<DictZipBlobStore::ZipBuilder>& zbuilder) {
+  size_t dictWorkingMemory = std::min<size_t>(sampleLenSum_, INT32_MAX) * 6;
+  auto waitHandle = WaitForMemory("dictZip", dictWorkingMemory);
+
+  valvec<byte_t> sample;
+  NativeDataInput<InputBuffer> sampleInput(&tmpSampleFile_.fp);
+  size_t realsampleLenSum = 0;
+  {
+    if (sampleLenSum_ < INT32_MAX) {
+      for (size_t len = 0; len < sampleLenSum_; ) {
+        sampleInput >> sample;
+        zbuilder->addSample(sample);
+        len += sample.size();
+      }
+      realsampleLenSum = sampleLenSum_;
+    }
+    else {
+      uint64_t upperBoundSample = uint64_t(
+        randomGenerator_.max() * double(INT32_MAX) / sampleLenSum_);
+      for (size_t len = 0; len < sampleLenSum_; ) {
+        sampleInput >> sample;
+        if (randomGenerator_() < upperBoundSample) {
+          zbuilder->addSample(sample);
+          realsampleLenSum += sample.size();
+        }
+        len += sample.size();
+      }
+    }
+  }
+  tmpSampleFile_.close();
+  if (0 == realsampleLenSum) { // prevent from empty
+    zbuilder->addSample("Hello World!");
+  }
+  zbuilder->finishSample();
+  return waitHandle;
+}
+
+
 Status
 TerarkZipTableBuilder::
 ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
@@ -518,58 +558,29 @@ ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex) {
   AutoDeleteFile tmpDictFile{tmpValueFile_.path + ".dict"};
   NativeDataInput<InputBuffer> input(&tmpValueFile_.fp);
   auto& kvs = histogram_.front();
-  std::unique_ptr<DictZipBlobStore::ZipBuilder> zbuilder;
   DictZipBlobStore::ZipStat dzstat;
   long long t3, t4;
+
+  t3 = g_pf.now();
   {
-    size_t dictWorkingMemory = std::min<size_t>(sampleLenSum_, INT32_MAX) * 6;
-    auto dictWaitHandle = WaitForMemory("dictZip", dictWorkingMemory);
-    t3 = g_pf.now();
-    zbuilder = UniquePtrOf(this->createZipBuilder());
+    auto zbuilder = UniquePtrOf(createZipBuilder());
+    WaitHandle dictWaitHandle = LoadSample(zbuilder);
     {
-      valvec<byte_t> sample;
-      NativeDataInput<InputBuffer> input(&tmpSampleFile_.fp);
-      size_t realsampleLenSum = 0;
-      if (sampleLenSum_ < INT32_MAX) {
-        for (size_t len = 0; len < sampleLenSum_; ) {
-          input >> sample;
-          zbuilder->addSample(sample);
-          len += sample.size();
-        }
-        realsampleLenSum = sampleLenSum_;
-      }
-      else {
-        uint64_t upperBound2 = uint64_t(
-          randomGenerator_.max() * double(INT32_MAX) / sampleLenSum_);
-        for (size_t len = 0; len < sampleLenSum_; ) {
-          input >> sample;
-          if (randomGenerator_() < upperBound2) {
-            zbuilder->addSample(sample);
-            realsampleLenSum += sample.size();
-          }
-          len += sample.size();
-        }
-      }
-      tmpSampleFile_.close();
-      if (0 == realsampleLenSum) { // prevent from empty
-        zbuilder->addSample("Hello World!");
-      }
-      zbuilder->finishSample();
       zbuilder->prepare(kvs.stat.numKeys, tmpStoreFile);
-    }
 
-    BuilderWriteValues(input, kvs, [&](fstring value) {zbuilder->addRecord(value); });
+      BuilderWriteValues(input, kvs, [&](fstring value) {zbuilder->addRecord(value); });
 
-    auto store = zbuilder->finish(DictZipBlobStore::ZipBuilder::FinishFreeDict
+      auto store = zbuilder->finish(DictZipBlobStore::ZipBuilder::FinishFreeDict
         | DictZipBlobStore::ZipBuilder::FinishWithoutReload);
-    assert(store == nullptr);
-    (void)store;
-    dzstat = zbuilder->getZipStat();
+      assert(store == nullptr);
+      (void)store;
+      dzstat = zbuilder->getZipStat();
 
-    t4 = g_pf.now();
-    auto dict = zbuilder->getDictionary().memory;
-    FileStream(tmpDictFile, "wb+").ensureWrite(dict.data(), dict.size());
-    zbuilder.reset();
+      t4 = g_pf.now();
+      auto dict = zbuilder->getDictionary().memory;
+      FileStream(tmpDictFile, "wb+").ensureWrite(dict.data(), dict.size());
+      zbuilder.reset();
+    }
   }
   DebugCleanup();
   // wait for indexing complete, if indexing is slower than value compressing

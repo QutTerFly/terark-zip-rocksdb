@@ -736,6 +736,10 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
       "EnvOptions::use_mmap_reads must be true");
   }
+  if (uniqueProps->comparator_name != fstring(ioptions.user_comparator->Name())) {
+    return Status::InvalidArgument("TerarkZipTableReader::Open()",
+      "Invalid user_comparator");
+  }
   file_data_ = file_data;
   table_properties_.reset(uniqueProps.release());
   global_seqno_ = GetGlobalSequenceNumber(*table_properties_, ioptions.info_log);
@@ -772,6 +776,10 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   else {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
       "EnvOptions::use_mmap_reads must be true");
+  }
+  if (uniqueProps->comparator_name != fstring(ioptions.user_comparator->Name())) {
+    return Status::InvalidArgument("TerarkZipTableReader::Open()",
+      "Invalid user_comparator");
   }
   file_data_ = file_data;
   table_properties_.reset(uniqueProps.release());

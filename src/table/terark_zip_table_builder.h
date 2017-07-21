@@ -96,11 +96,7 @@ private:
   WaitHandle WaitForMemory(const char* who, size_t memorySize);
   Status EmptyTableFinish();
   Status OfflineFinish();
-  struct BuildStoreParams {
-    NativeDataInput<InputBuffer>& input;
-    KeyValueStatus& kvs;
-    WaitHandle handle;
-  };
+  WaitHandle LoadSample(std::unique_ptr<DictZipBlobStore::ZipBuilder>& zbuilder);
   Status ZipValueToFinish(fstring tmpIndexFile, std::function<void()> waitIndex);
   void DebugPrepare();
   void DebugCleanup();
@@ -151,6 +147,7 @@ private:
 #if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
   bool isUint64Comparator_;
 #endif
+  int level_;
 
   long long t0 = 0;
   size_t key_prefixLen_;
