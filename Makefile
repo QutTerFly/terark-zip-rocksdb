@@ -152,6 +152,7 @@ ifeq (, ${prefix})
 endif
 TerarkZipRocks_lib := terark-zip-rocksdb${TERARK_ZIP_TRIAL_VERSION}
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
+TerarkZipRocks_src += ${BUILD_ROOT}/git-version-terark_zip_rocksdb.cpp
 
 LIB_TERARK_D := -L${TerarkLibDir} -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
 LIB_TERARK_R := -L${TerarkLibDir} -lterark-zbs-${COMPILER}-r -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
@@ -275,6 +276,26 @@ endif
 
 ${TarBall}.tgz: ${TarBall}
 	cd pkg; tar czf ${TarBallBaseName}.tgz ${TarBallBaseName}
+
+.PHONY: git-version.phony
+${BUILD_ROOT}/git-version-%.cpp: git-version.phony
+	@mkdir -p $(dir $@)
+	@rm -f $@.tmp
+	@echo '__attribute__ ((visibility ("default"))) const char*' \
+		  'git_version_hash_info_'$(patsubst git-version-%.cpp,%,$(notdir $@))\
+		  '() { return R"StrLiteral(git_version_hash_info_is:' > $@.tmp
+	@env LC_ALL=C git log -n1 >> $@.tmp
+	@env LC_ALL=C git diff >> $@.tmp
+	@env LC_ALL=C $(CXX) --version >> $@.tmp
+	@echo cpu_flag: $(CPU) >> $@.tmp
+	@echo ')''StrLiteral";}' >> $@.tmp
+	@#      ^^----- To prevent diff causing git-version compile fail
+	@if test -f "$@" && cmp "$@" $@.tmp; then \
+		rm $@.tmp; \
+	else \
+		mv $@.tmp $@; \
+	fi
+
 
 %${DLL_SUFFIX}:
 	@echo "----------------------------------------------------------------------------------"
