@@ -89,7 +89,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
+    <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
     <LibraryPath>..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
     <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
   </PropertyGroup>
@@ -105,7 +105,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;SNAPPY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>terark-zbs-d.lib;terark-fsa-d.lib;terark-core-d.lib;rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
