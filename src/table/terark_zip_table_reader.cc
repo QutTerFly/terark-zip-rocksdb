@@ -9,6 +9,7 @@
 #include <table/meta_blocks.h>
 #include <table/get_context.h>
 // terark headers
+#include <terark/lcast.hpp>
 #include <terark/util/crc.hpp>
 
 
@@ -132,6 +133,7 @@ static void MmapColdize(const Vec& uv) {
   MmapColdizeBytes(uv.data(), uv.mem_size());
 }
 */
+
 
 }
 
@@ -738,7 +740,8 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   }
   if (uniqueProps->comparator_name != fstring(ioptions.user_comparator->Name())) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
-      "Invalid user_comparator");
+      "Invalid user_comparator , need " + uniqueProps->comparator_name
+      + ", but provid " + ioptions.user_comparator->Name());
   }
   file_data_ = file_data;
   table_properties_.reset(uniqueProps.release());
@@ -779,7 +782,8 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   }
   if (uniqueProps->comparator_name != fstring(ioptions.user_comparator->Name())) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
-      "Invalid user_comparator");
+      "Invalid user_comparator , need " + uniqueProps->comparator_name
+      + ", but provid " + ioptions.user_comparator->Name());
   }
   file_data_ = file_data;
   table_properties_.reset(uniqueProps.release());

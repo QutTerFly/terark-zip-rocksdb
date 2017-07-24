@@ -9,7 +9,7 @@
 #include <terark/util/sortable_strvec.hpp>
 
 
-//#define DEBUG_ITERATOR
+#define DEBUG_ITERATOR
 
 namespace rocksdb {
 
@@ -65,7 +65,7 @@ const TerarkIndex::Factory* TerarkIndex::GetFactory(fstring name) {
 
 const TerarkIndex::Factory*
 TerarkIndex::SelectFactory(const KeyStat& ks, fstring name) {
-  if (ks.numKeys > (1ull << 30) || ks.sumKeyLen - ks.numKeys * ks.commonPrefixLen > (15ull << 30)) {
+  if (ks.sumKeyLen - ks.numKeys * ks.commonPrefixLen > INT32_MAX) {
     return GetFactory("SE_512_64");
   }
   return GetFactory(name);
@@ -113,7 +113,8 @@ class NestLoudsTrieIndex : public TerarkIndex {
       std::string saved_key(key_ref.data(), key_ref.size());
       bool ret = Done(m_trie, m_iter->incr());
       if (ret && key() < saved_key) {
-        throw std::exception("NestLoudsTrieIndex::Next() error");
+        assert(0);
+        //throw std::exception("NestLoudsTrieIndex::Next() error");
       }
       return ret;
 #else
@@ -126,7 +127,8 @@ class NestLoudsTrieIndex : public TerarkIndex {
       std::string saved_key(key_ref.data(), key_ref.size());
       bool ret = Done(m_trie, m_iter->decr());
       if (ret && key() > saved_key) {
-        throw std::exception("NestLoudsTrieIndex::Prev() error");
+        assert(0);
+        //throw std::exception("NestLoudsTrieIndex::Prev() error");
       }
       return ret;
 #else
@@ -247,7 +249,8 @@ public:
 #endif
       terark::NestLoudsTrieConfig conf;
       conf.nestLevel = tzopt.indexNestLevel;
-      if (tzopt.indexTempLevel >= 0 && tzopt.indexTempLevel < 4) {
+      conf.nestScale = tzopt.indexNestScale;
+      if (tzopt.indexTempLevel >= 0 && tzopt.indexTempLevel < 5) {
         if (keyVec.mem_size() > tzopt.smallTaskMemory) {
           // use tmp files during index building
           conf.tmpDir = tzopt.localTempDir;
@@ -256,7 +259,7 @@ public:
             if (keyVec.avg_size() <= 16) {
               // not need any mem in BFS, instead 8G file of 4G mem (linkVec)
               // this reduce 10% peak mem when avg keylen is 24 bytes
-              conf.tmpLevel = 3;
+              conf.tmpLevel = 4;
             }
             else if (keyVec.mem_size() > tzopt.smallTaskMemory*3/2) {
               // for example:
@@ -269,10 +272,10 @@ public:
           }
         }
       }
-      if (tzopt.indexTempLevel >= 4) {
+      if (tzopt.indexTempLevel >= 5) {
         // always use max tmpLevel 3
         conf.tmpDir = tzopt.localTempDir;
-        conf.tmpLevel = 3;
+        conf.tmpLevel = 4;
       }
       conf.isInputSorted = true;
       std::unique_ptr<NLTrie> trie(new NLTrie());

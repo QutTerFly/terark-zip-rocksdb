@@ -10,7 +10,11 @@
 #include <table/meta_blocks.h>
 // terark headers
 #include <terark/util/sortable_strvec.hpp>
+#include <terark/lcast.hpp>
 
+namespace snappy {
+  size_t Compress(const char* input, size_t input_length, std::string* output);
+}
 
 namespace rocksdb {
 
@@ -60,6 +64,12 @@ Status WriteBlock(const ByteArray& blockData, WritableFileWriter* file,
   return s;
 }
 
+std::string GetTimestamp() {
+    using namespace std::chrono;
+    uint64_t timestamp = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    return terark::lcast(timestamp);
+}
+
 namespace {
 struct PendingTask {
   const TerarkZipTableBuilder* tztb;
@@ -76,7 +86,6 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(
   : table_options_(tzto)
   , ioptions_(tbo.ioptions)
   , range_del_block_(1)
-  , level_(tbo.level)
   , key_prefixLen_(key_prefixLen)
 {
   properties_.fixed_key_len = 0;
@@ -1055,6 +1064,7 @@ Status TerarkZipTableBuilder::WriteMetaData(std::initializer_list<std::pair<cons
   NotifyCollectTableCollectorsOnFinish(collectors_,
     ioptions_.info_log,
     &propBlockBuilder);
+  propBlockBuilder.Add(kTerarkZipTableBuildTimestamp, GetTimestamp());
   BlockHandle propBlock, metaindexBlock;
   Status s = WriteBlock(propBlockBuilder.Finish(), file_, &offset_, &propBlock);
   if (!s.ok()) {

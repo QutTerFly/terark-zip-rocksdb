@@ -34,6 +34,8 @@ void TerarkZipDeleteTempFiles(const std::string& tmpPath) {
         || fstring(f).startsWith("linkVec-")
         || fstring(f).startsWith("label-")
         || fstring(f).startsWith("nextStrVec-")
+        || fstring(f).startsWith("nestStrVec-")
+        || fstring(f).startsWith("nestStrPool-")
         ) {
       fpath.resize(0);
       fpath.append(tmpPath);
@@ -229,6 +231,7 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetInt   (tzo, debugLevel              , 0    );
   MyGetInt   (tzo, keyPrefixLen            , 0    );
   MyGetInt   (tzo, offsetArrayBlockUnits   , 0    );
+  MyGetInt   (tzo, indexNestScale          , 8    );
   if (true
       && 0   != tzo.offsetArrayBlockUnits
       && 64  != tzo.offsetArrayBlockUnits
@@ -240,11 +243,20 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
     );
     tzo.offsetArrayBlockUnits = 128;
   }
+  if (tzo.indexNestScale == 0
+  ){
+    STD_WARN(
+      "TerarkZipConfigFromEnv: bad indexNestScale = %d, must be in [1,255], reset to 8\n"
+      , int(tzo.indexNestScale)
+    );
+    tzo.offsetArrayBlockUnits = 8;
+  }
 
   MyGetBool  (tzo, useSuffixArrayLocalMatch, false);
   MyGetBool  (tzo, warmUpIndexOnOpen       , true );
   MyGetBool  (tzo, warmUpValueOnOpen       , false);
   MyGetBool  (tzo, disableSecondPassIter   , false);
+  MyGetBool  (tzo, enableCompressionProbe  , true );
 
   MyGetDouble(tzo, estimateCompressionRatio, 0.20 );
   MyGetDouble(tzo, sampleRatio             , 0.03 );

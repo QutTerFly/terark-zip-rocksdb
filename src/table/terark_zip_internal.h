@@ -13,7 +13,6 @@
 // project headers
 #include "terark_zip_table.h"
 // std headers
-#include <deque>
 #include <mutex>
 // rocksdb headers
 #include <rocksdb/slice.h>
@@ -30,6 +29,9 @@
 //#define DEBUG_TWO_PASS_ITER
 
 
+
+
+void PrintVersion(rocksdb::Logger* info_log);
 
 namespace rocksdb {
 
@@ -49,6 +51,7 @@ extern const std::string kTerarkZipTableOffsetBlock;
 extern const std::string kTerarkZipTableCommonPrefixBlock;
 extern const std::string kTerarkEmptyTableKey;
 
+extern const std::string kTerarkZipTableBuildTimestamp;
 
 template<class ByteArray>
 inline Slice SliceOf(const ByteArray& ba) {

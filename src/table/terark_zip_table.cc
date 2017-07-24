@@ -37,6 +37,25 @@
 
 // 3rd-party headers
 
+static std::once_flag PrintVersionHashInfoFlag;
+
+#ifndef _MSC_VER
+const char* git_version_hash_info_core();
+const char* git_version_hash_info_fsa();
+const char* git_version_hash_info_zbs();
+const char* git_version_hash_info_terark_zip_rocksdb();
+#endif
+
+void PrintVersionHashInfo(rocksdb::Logger* info_log) {
+  std::call_once(PrintVersionHashInfoFlag, [info_log] {
+#ifndef _MSC_VER
+    INFO(info_log, "core %s", git_version_hash_info_core());
+    INFO(info_log, "fsa %s", git_version_hash_info_fsa());
+    INFO(info_log, "zbs %s", git_version_hash_info_zbs());
+    INFO(info_log, "terark_zip_rocksdb %s", git_version_hash_info_terark_zip_rocksdb());
+#endif
+  });
+}
 
 
 
@@ -59,6 +78,7 @@ const std::string kTerarkZipTableOffsetBlock       = "TerarkZipTableOffsetBlock"
 const std::string kTerarkZipTableCommonPrefixBlock = "TerarkZipTableCommonPrefixBlock";
 const std::string kTerarkEmptyTableKey             = "ThisIsAnEmptyTable";
 
+const std::string kTerarkZipTableBuildTimestamp = "terark.build.timestamp";
 
 
 
@@ -104,6 +124,7 @@ TerarkZipTableFactory::NewTableReader(
   uint64_t file_size, unique_ptr<TableReader>* table,
   bool prefetch_index_and_filter_in_cache)
   const {
+  PrintVersionHashInfo(table_reader_options.ioptions.info_log);
   auto userCmp = table_reader_options.internal_comparator.user_comparator();
   if (!IsBytewiseComparator(userCmp)) {
     return Status::InvalidArgument("TerarkZipTableFactory::NewTableReader()",
@@ -177,6 +198,7 @@ TerarkZipTableFactory::NewTableBuilder(
   uint32_t column_family_id,
   WritableFileWriter* file)
   const {
+  PrintVersionHashInfo(table_builder_options.ioptions.info_log);
   auto userCmp = table_builder_options.internal_comparator.user_comparator();
   if (!IsBytewiseComparator(userCmp)) {
     THROW_STD(invalid_argument,
