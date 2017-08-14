@@ -14,6 +14,7 @@
 #include "terark_zip_table.h"
 // std headers
 #include <mutex>
+#include <atomic>
 // rocksdb headers
 #include <rocksdb/slice.h>
 #include <rocksdb/env.h>
@@ -69,6 +70,35 @@ inline ByteArrayView SubStr(const ByteArrayView& x, size_t pos) {
   return ByteArrayView(x.data() + pos, x.size() - pos);
 }
 
+
+struct CollectInfo {
+  static const size_t queue_size;
+  static const double hard_ratio;
+
+  struct CompressionInfo {
+    uint64_t timestamp;
+    size_t raw_value;
+    size_t zip_value;
+    size_t raw_store;
+    size_t zip_store;
+  };
+  std::vector<CompressionInfo> queue;
+  size_t raw_value_size = 0;
+  size_t zip_value_size = 0;
+  size_t raw_store_size = 0;
+  size_t zip_store_size = 0;
+  std::atomic<float> estimate_compression_ratio;
+  mutable std::mutex mutex;
+
+  CollectInfo() : estimate_compression_ratio{0} {}
+
+  void update(uint64_t timestamp
+    , size_t raw_value, size_t zip_value
+    , size_t raw_store, size_t zip_store);
+  static bool hard(size_t raw, size_t zip);
+  bool hard() const;
+  float estimate(float def_value) const;
+};
 
 enum class ZipValueType : unsigned char {
   kZeroSeq = 0,
@@ -159,6 +189,12 @@ private:
   TableFactory* adaptive_factory_; // just for open table
   mutable size_t nth_new_terark_table_ = 0;
   mutable size_t nth_new_fallback_table_ = 0;
+private:
+  mutable CollectInfo collect_;
+public:
+  CollectInfo& GetCollect() const {
+    return collect_;
+  }
 };
 
 

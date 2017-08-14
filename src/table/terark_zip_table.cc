@@ -81,6 +81,49 @@ const std::string kTerarkEmptyTableKey             = "ThisIsAnEmptyTable";
 const std::string kTerarkZipTableBuildTimestamp = "terark.build.timestamp";
 
 
+const size_t CollectInfo::queue_size = 8;
+const double CollectInfo::hard_ratio = 0.9;
+
+void CollectInfo::update(uint64_t timestamp
+  , size_t raw_value, size_t zip_value
+  , size_t raw_store, size_t zip_store) {
+  std::unique_lock<std::mutex> l(mutex);
+  raw_value_size += raw_value;
+  zip_value_size += zip_value;
+  raw_store_size += raw_store;
+  zip_store_size += zip_store;
+  auto comp = [](const CompressionInfo& l, const CompressionInfo& r) {
+    return l.timestamp > r.timestamp;
+  };
+  queue.emplace_back(CompressionInfo{timestamp
+    , raw_value, zip_value, raw_store, zip_store});
+  std::push_heap(queue.begin(), queue.end(), comp);
+  while (queue.size() > queue_size) {
+    auto& front = queue.front();
+    raw_value_size += front.raw_value;
+    zip_value_size += front.zip_value;
+    raw_store_size += front.raw_store;
+    zip_store_size += front.zip_store;
+    std::pop_heap(queue.begin(), queue.end(), comp);
+    queue.pop_back();
+  }
+  estimate_compression_ratio = float(zip_store_size) / float(raw_store_size);
+}
+
+bool CollectInfo::hard(size_t raw, size_t zip) {
+  return double(zip) / double(raw) > hard_ratio;
+}
+
+bool CollectInfo::hard() const {
+  std::unique_lock<std::mutex> l(mutex);
+  return !queue.empty() && hard(raw_value_size, zip_value_size);
+}
+
+float CollectInfo::estimate(float def_value) const {
+  float ret = estimate_compression_ratio;
+  return ret ? ret : def_value;
+}
+
 
 class TableFactory*
   NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
@@ -165,7 +208,7 @@ TerarkZipTableFactory::NewTableReader(
     , table_reader_options.ioptions, kTerarkEmptyTableKey, &emptyTableBC);
   if (s.ok()) {
     std::unique_ptr<TerarkEmptyTableReader>
-      t(new TerarkEmptyTableReader(table_reader_options));
+      t(new TerarkEmptyTableReader(this, table_reader_options));
     s = t->Open(file.release(), file_size);
     if (!s.ok()) {
       return s;
@@ -174,7 +217,7 @@ TerarkZipTableFactory::NewTableReader(
     return s;
   }
   std::unique_ptr<TerarkZipTableReader>
-    t(new TerarkZipTableReader(table_reader_options, table_options_));
+    t(new TerarkZipTableReader(this, table_reader_options, table_options_));
   s = t->Open(file.release(), file_size);
   if (s.ok()) {
     *table = std::move(t);
@@ -185,7 +228,8 @@ TerarkZipTableFactory::NewTableReader(
 // defined in terark_zip_table_builder.cc
 extern
 TableBuilder*
-createTerarkZipTableBuilder(const TerarkZipTableOptions& tzo,
+createTerarkZipTableBuilder(const TerarkZipTableFactory* table_factory,
+                            const TerarkZipTableOptions& tzo,
                             const TableBuilderOptions&   tbo,
                             uint32_t                     column_family_id,
                             WritableFileWriter*          file,
@@ -240,6 +284,7 @@ TerarkZipTableFactory::NewTableBuilder(
   nth_new_terark_table_++;
 
   return createTerarkZipTableBuilder(
+    this,
     table_options_,
     table_builder_options,
     column_family_id,
@@ -266,13 +311,18 @@ std::string TerarkZipTableFactory::GetPrintableTableOptions() const {
 #define M_APPEND(fmt, value) \
 ret.append(buffer, snprintf(buffer, kBufferSize, fmt "\n", value))
 
+  M_APPEND("extendedConfigFile       : %s", tzto.extendedConfigFile.c_str());
   M_APPEND("indexType                : %s", tzto.indexType.c_str());
   M_APPEND("checksumLevel            : %d", tzto.checksumLevel);
   M_APPEND("entropyAlgo              : %d", (int)tzto.entropyAlgo);
   M_APPEND("indexNestLevel           : %d", tzto.indexNestLevel);
-  M_APPEND("indexTempLevel           : %d", tzto.indexTempLevel);
+  M_APPEND("indexNestScale           : %d", (int)tzto.indexNestScale);
+  M_APPEND("indexTempLevel           : %d", (int)tzto.indexTempLevel);
   M_APPEND("terarkZipMinLevel        : %d", tzto.terarkZipMinLevel);
-  M_APPEND("debugLevel               : %d", tzto.debugLevel);
+  M_APPEND("minDictZipValueSize      : %zd", tzto.minDictZipValueSize);
+  M_APPEND("keyPrefixLen             : %zd", tzto.keyPrefixLen);
+  M_APPEND("debugLevel               : %d", (int)tzto.debugLevel);
+  M_APPEND("enableCompressionProbe   : %s", cvb[!!tzto.enableCompressionProbe]);
   M_APPEND("useSuffixArrayLocalMatch : %s", cvb[!!tzto.useSuffixArrayLocalMatch]);
   M_APPEND("warmUpIndexOnOpen        : %s", cvb[!!tzto.warmUpIndexOnOpen]);
   M_APPEND("warmUpValueOnOpen        : %s", cvb[!!tzto.warmUpValueOnOpen]);
@@ -284,6 +334,7 @@ ret.append(buffer, snprintf(buffer, kBufferSize, fmt "\n", value))
   M_APPEND("softZipWorkingMemLimit   : %.3fGB", tzto.softZipWorkingMemLimit / gb);
   M_APPEND("hardZipWorkingMemLimit   : %.3fGB", tzto.hardZipWorkingMemLimit / gb);
   M_APPEND("smallTaskMemory          : %.3fGB", tzto.smallTaskMemory / gb);
+  M_APPEND("singleIndexMemLimit      : %.3fGB", tzto.singleIndexMemLimit / gb);
 
 #undef M_APPEND
 

@@ -6,6 +6,7 @@
 #include <terark/int_vector.hpp>
 #include <terark/io/DataIO.hpp>
 #include <terark/io/StreamBuffer.hpp>
+#include <terark/util/fstrvec.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <memory>
 
@@ -16,6 +17,7 @@ using terark::valvec;
 using terark::byte_t;
 using terark::NativeDataInput;
 using terark::InputBuffer;
+using terark::fstrvec;
 using std::unique_ptr;
 
 struct TerarkZipTableOptions;
@@ -39,7 +41,7 @@ public:
     inline void SetInvalid() { m_id = size_t(-1); }
   };
   struct KeyStat {
-    size_t commonPrefixLen = size_t(-1);
+    size_t commonPrefixLen = 0;
     size_t minKeyLen = 0;
     size_t maxKeyLen = size_t(-1);
     size_t sumKeyLen = 0;
@@ -50,10 +52,9 @@ public:
   class Factory : public terark::RefCounter {
   public:
     virtual ~Factory();
-    virtual void Build(NativeDataInput<InputBuffer>& tmpKeyFileReader,
-                       const TerarkZipTableOptions& tzopt,
-                       std::function<void(const void *, size_t)> write,
-                       KeyStat&) const = 0;
+    virtual TerarkIndex* Build(NativeDataInput<InputBuffer>& tmpKeyFileReader,
+                               const TerarkZipTableOptions& tzopt,
+                               const KeyStat&) const = 0;
     virtual unique_ptr<TerarkIndex> LoadMemory(fstring mem) const = 0;
     virtual unique_ptr<TerarkIndex> LoadFile(fstring fpath) const = 0;
     virtual size_t MemSizeForBuild(const KeyStat&) const = 0;
@@ -69,6 +70,7 @@ public:
   static unique_ptr<TerarkIndex> LoadMemory(fstring mem);
   virtual ~TerarkIndex();
   virtual const char* Name() const = 0;
+  virtual void SaveMmap(std::function<void(const void *, size_t)> write) const = 0;
   virtual size_t Find(fstring key) const = 0;
   virtual size_t NumKeys() const = 0;
   virtual fstring Memory() const = 0;

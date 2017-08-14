@@ -9,7 +9,7 @@
 #include <terark/util/sortable_strvec.hpp>
 
 
-#define DEBUG_ITERATOR
+//#define DEBUG_ITERATOR
 
 namespace rocksdb {
 
@@ -25,6 +25,7 @@ using terark::SortedStrVec;
 using terark::FixedLenStrVec;
 using terark::MmapWholeFile;
 using terark::UintVecMin0;
+using terark::MatchingDFA;
 
 static terark::hash_strmap<TerarkIndex::FactoryPtr> g_TerarkIndexFactroy;
 static terark::hash_strmap<std::string>             g_TerarkIndexName;
@@ -44,11 +45,10 @@ struct TerarkIndexHeader {
 };
 
 TerarkIndex::AutoRegisterFactory::AutoRegisterFactory(
-    std::initializer_list<const char*> names,
-    const char* rtti_name,
-    Factory* factory) {
+  std::initializer_list<const char*> names,
+  const char* rtti_name,
+  Factory* factory) {
   for (const char* name : names) {
-//  STD_INFO("AutoRegisterFactory: %s\n", name);
     g_TerarkIndexFactroy.insert_i(name, FactoryPtr(factory));
     g_TerarkIndexName.insert_i(rtti_name, *names.begin());
   }
@@ -65,7 +65,7 @@ const TerarkIndex::Factory* TerarkIndex::GetFactory(fstring name) {
 
 const TerarkIndex::Factory*
 TerarkIndex::SelectFactory(const KeyStat& ks, fstring name) {
-  if (ks.sumKeyLen - ks.numKeys * ks.commonPrefixLen > INT32_MAX) {
+  if (ks.sumKeyLen - ks.numKeys * ks.commonPrefixLen > 0x1E0000000) { // 7.5G
     return GetFactory("SE_512_64");
   }
   return GetFactory(name);
@@ -78,7 +78,19 @@ TerarkIndex::Iterator::~Iterator() {}
 class NestLoudsTrieIterBase : public TerarkIndex::Iterator {
 protected:
   unique_ptr<terark::ADFA_LexIterator> m_iter;
-  template<class NLTrie>
+  fstring key() const override {
+    return fstring(m_iter->word());
+  }
+  NestLoudsTrieIterBase(terark::ADFA_LexIterator* iter)
+   : m_iter(iter) {}
+};
+
+template<class NLTrie>
+class NestLoudsTrieIterBaseTpl : public NestLoudsTrieIterBase {
+protected:
+  using TerarkIndex::Iterator::m_id;
+  NestLoudsTrieIterBaseTpl(const NLTrie* trie)
+    : NestLoudsTrieIterBase(trie->adfa_make_iter(initial_state)) {}
   bool Done(const NLTrie* trie, bool ok) {
     if (ok)
       m_id = trie->state_to_word_id(m_iter->word_state());
@@ -86,26 +98,67 @@ protected:
       m_id = size_t(-1);
     return ok;
   }
-  fstring key() const override {
-    return fstring(m_iter->word());
-  }
-  NestLoudsTrieIterBase(terark::ADFA_LexIterator* iter)
-   : m_iter(iter) {}
 };
+template<>
+class NestLoudsTrieIterBaseTpl<MatchingDFA> : public NestLoudsTrieIterBase {
+protected:
+  using TerarkIndex::Iterator::m_id;
+  NestLoudsTrieIterBaseTpl(const MatchingDFA* dfa)
+    : NestLoudsTrieIterBase(dfa->adfa_make_iter(initial_state)) {
+    m_dawg = dfa->get_dawg();
+  }
+  const terark::BaseDAWG* m_dawg;
+  bool Done(const MatchingDFA* trie, bool ok) {
+    assert(trie->get_dawg() == m_dawg);
+    if (ok)
+      m_id = m_dawg->v_state_to_word_id(m_iter->word_state());
+    else
+      m_id = size_t(-1);
+    return ok;
+  }
+};
+
+template<class NLTrie>
+void NestLoudsTrieBuildCache(NLTrie* trie, double cacheRatio) {
+  trie->build_fsa_cache(cacheRatio, NULL);
+}
+void NestLoudsTrieBuildCache(MatchingDFA* dfa, double cacheRatio) {
+}
+
+
+template<class NLTrie>
+void NestLoudsTrieGetOrderMap(NLTrie* trie, UintVecMin0& newToOld) {
+  terark::NonRecursiveDictionaryOrderToStateMapGenerator gen;
+  gen(*trie, [&](size_t dictOrderOldId, size_t state) {
+    size_t newId = trie->state_to_word_id(state);
+    //assert(trie->state_to_dict_index(state) == dictOrderOldId);
+    //assert(trie->dict_index_to_state(dictOrderOldId) == state);
+    newToOld.set_wire(newId, dictOrderOldId);
+  });
+}
+void NestLoudsTrieGetOrderMap(MatchingDFA* dfa, UintVecMin0& newToOld) {
+  assert(0);
+}
+
+
 template<class NLTrie>
 class NestLoudsTrieIndex : public TerarkIndex {
+  const terark::BaseDAWG* m_dawg;
   unique_ptr<NLTrie> m_trie;
-  class MyIterator : public NestLoudsTrieIterBase {
+  class MyIterator : public NestLoudsTrieIterBaseTpl<NLTrie> {
     const NLTrie* m_trie;
+  protected:
+    using NestLoudsTrieIterBaseTpl<NLTrie>::Done;
+    using NestLoudsTrieIterBase::m_iter;
   public:
     explicit MyIterator(NLTrie* trie)
-     : NestLoudsTrieIterBase(trie->adfa_make_iter(initial_state))
-     , m_trie(trie)
+      : NestLoudsTrieIterBaseTpl<NLTrie>(trie)
+      , m_trie(trie)
     {}
     bool SeekToFirst() override { return Done(m_trie, m_iter->seek_begin()); }
     bool SeekToLast()  override { return Done(m_trie, m_iter->seek_end()); }
     bool Seek(fstring key) override {
-        return Done(m_trie, m_iter->seek_lower_bound(key));
+      return Done(m_trie, m_iter->seek_lower_bound(key));
     }
     bool Next() override {
 #ifdef DEBUG_ITERATOR
@@ -137,10 +190,15 @@ class NestLoudsTrieIndex : public TerarkIndex {
     }
   };
 public:
-  NestLoudsTrieIndex(NLTrie* trie) : m_trie(trie) {}
+  NestLoudsTrieIndex(NLTrie* trie) : m_trie(trie) {
+    m_dawg = trie->get_dawg();
+  }
   const char* Name() const override {
     auto header = (const TerarkIndexHeader*)m_trie->get_mmap().data();
     return header->class_name;
+  }
+  void SaveMmap(std::function<void(const void *, size_t)> write) const override {
+    m_trie->save_mmap(write);
   }
   size_t Find(fstring key) const override final {
     MY_THREAD_LOCAL(terark::MatchContext, ctx);
@@ -148,10 +206,10 @@ public:
     ctx.pos = 0;
     ctx.zidx = 0;
   //ctx.zbuf_state = size_t(-1);
-    return m_trie->index(ctx, key);
+    return m_dawg->index(ctx, key);
   }
   size_t NumKeys() const override final {
-    return m_trie->num_words();
+    return m_dawg->num_words();
   }
   fstring Memory() const override final {
     return m_trie->get_mmap();
@@ -162,23 +220,18 @@ public:
   bool NeedsReorder() const override final { return true; }
   void GetOrderMap(UintVecMin0& newToOld)
   const override final {
-    terark::NonRecursiveDictionaryOrderToStateMapGenerator gen;
-    gen(*m_trie, [&](size_t dictOrderOldId, size_t state) {
-      size_t newId = m_trie->state_to_word_id(state);
-      newToOld.set_wire(newId, dictOrderOldId);
-    });
+    NestLoudsTrieGetOrderMap(m_trie.get(), newToOld);
   }
   void BuildCache(double cacheRatio) {
     if (cacheRatio > 1e-8) {
-        m_trie->build_fsa_cache(cacheRatio, NULL);
+      NestLoudsTrieBuildCache(m_trie.get(), cacheRatio);
     }
   }
   class MyFactory : public Factory {
   public:
-    void Build(NativeDataInput<InputBuffer>& reader,
-               const TerarkZipTableOptions& tzopt,
-               std::function<void(const void *, size_t)> write,
-               KeyStat& ks) const override {
+    TerarkIndex* Build(NativeDataInput<InputBuffer>& reader,
+                       const TerarkZipTableOptions& tzopt,
+                       const KeyStat& ks) const override {
       size_t numKeys = ks.numKeys;
       size_t commonPrefixLen = ks.commonPrefixLen;
       size_t sumPrefixLen = commonPrefixLen * numKeys;
@@ -208,7 +261,7 @@ public:
           }
           assert(offset == 0);
         }
-        BuildImpl(tzopt, write, keyVec);
+        return BuildImpl(tzopt, keyVec);
       }
       else {
         size_t fixlen = ks.minKeyLen - commonPrefixLen;
@@ -231,14 +284,13 @@ public:
               , fixlen);
           }
         }
-        BuildImpl(tzopt, write, keyVec);
+        return BuildImpl(tzopt, keyVec);
       }
     }
   private:
     template<class StrVec>
-    void BuildImpl(const TerarkZipTableOptions& tzopt,
-                   std::function<void(const void *, size_t)> write,
-                   StrVec& keyVec) const {
+    TerarkIndex* BuildImpl(const TerarkZipTableOptions& tzopt,
+                           StrVec& keyVec) const {
 #if !defined(NDEBUG)
       for (size_t i = 1; i < keyVec.size(); ++i) {
         fstring prev = keyVec[i - 1];
@@ -256,10 +308,18 @@ public:
           conf.tmpDir = tzopt.localTempDir;
           if (0 == tzopt.indexTempLevel) {
             // adjust tmpLevel for linkVec, wihch is proportional to num of keys
-            if (keyVec.avg_size() <= 16) {
+            double avglen = keyVec.avg_size();
+            if (keyVec.mem_size() > tzopt.smallTaskMemory*2 && avglen <= 50) {
               // not need any mem in BFS, instead 8G file of 4G mem (linkVec)
               // this reduce 10% peak mem when avg keylen is 24 bytes
-              conf.tmpLevel = 4;
+              if (avglen <= 30) {
+                // write str data(each len+data) of nestStrVec to tmpfile
+                conf.tmpLevel = 4;
+              } else {
+                // write offset+len of nestStrVec to tmpfile
+                // which offset is ref to outer StrVec's data
+                conf.tmpLevel = 3;
+              }
             }
             else if (keyVec.mem_size() > tzopt.smallTaskMemory*3/2) {
               // for example:
@@ -273,14 +333,14 @@ public:
         }
       }
       if (tzopt.indexTempLevel >= 5) {
-        // always use max tmpLevel 3
+        // always use max tmpLevel 4
         conf.tmpDir = tzopt.localTempDir;
         conf.tmpLevel = 4;
       }
       conf.isInputSorted = true;
       std::unique_ptr<NLTrie> trie(new NLTrie());
       trie->build_from(keyVec, conf);
-      trie->save_mmap(write);
+      return new NestLoudsTrieIndex(trie.release());
     }
   public:
     unique_ptr<TerarkIndex> LoadMemory(fstring mem) const override {

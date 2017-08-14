@@ -135,6 +135,23 @@ static void MmapColdize(const Vec& uv) {
 */
 
 
+void UpdateCollectInfo(const TerarkZipTableFactory* table_factory,
+                       const TerarkZipTableOptions* tzopt,
+                       TableProperties *props,
+                       size_t file_size) {
+  if (!tzopt->enableCompressionProbe) {
+    return;
+  }
+  auto find = props->user_collected_properties.find(kTerarkZipTableBuildTimestamp);
+  if (find == props->user_collected_properties.end()) {
+    return;
+  }
+  auto& collect = table_factory->GetCollect();
+  collect.update(terark::lcast(find->second)
+      , props->raw_value_size, props->data_size
+      , props->raw_key_size + props->raw_value_size, file_size);
+}
+
 }
 
 
@@ -659,7 +676,15 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
     }
     break; }
   case ZipValueType::kDelete: {
-    // little endian uint64_t
+    g_tbuf.erase_all();
+    try {
+      g_tbuf.reserve(sizeof(SequenceNumber));
+      store_->get_record_append(recId, &g_tbuf);
+      assert(g_tbuf.size() == sizeof(SequenceNumber) - 1);
+    }
+    catch (const terark::BadChecksumException& ex) {
+      return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
+    }
     uint64_t seq = *(uint64_t*)g_tbuf.data() & kMaxSequenceNumber;
     if (seq <= pikey.sequence) {
       get_context->SaveValue(ParsedInternalKey(pikey.user_key, seq, kTypeDeletion),
@@ -795,6 +820,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     fstring(ioptions.user_comparator->Name()) == "rocksdb.Uint64Comparator";
 #endif
   BlockContents valueDictBlock, indexBlock, zValueTypeBlock, commonPrefixBlock;
+  UpdateCollectInfo(table_factory_, &tzto_, props, file_size);
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableValueDictBlock, &valueDictBlock);
   s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
@@ -935,9 +961,11 @@ TerarkZipTableReader::Get(const ReadOptions& ro, const Slice& ikey,
 TerarkZipTableReader::~TerarkZipTableReader() {
 }
 
-TerarkZipTableReader::TerarkZipTableReader(const TableReaderOptions& tro,
-  const TerarkZipTableOptions& tzto)
+TerarkZipTableReader::TerarkZipTableReader(const TerarkZipTableFactory* table_factory,
+                                           const TableReaderOptions& tro,
+                                           const TerarkZipTableOptions& tzto)
   : table_reader_options_(tro)
+  , table_factory_(table_factory)
   , global_seqno_(kDisableGlobalSequenceNumber)
   , tzto_(tzto)
 {
