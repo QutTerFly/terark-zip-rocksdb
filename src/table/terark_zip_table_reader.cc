@@ -109,6 +109,7 @@ static void MmapWarmUp(const Vec& uv) {
   MmapWarmUpBytes(uv.data(), uv.mem_size());
 }
 
+/*
 static void MmapColdizeBytes(const void* addr, size_t len) {
   size_t low = terark::align_up(size_t(addr), 4096);
   size_t hig = terark::align_down(size_t(addr) + len, 4096);
@@ -124,6 +125,7 @@ static void MmapColdizeBytes(const void* addr, size_t len) {
 static void MmapColdize(fstring mem) {
   MmapColdizeBytes(mem.data(), mem.size());
 }
+*/
 /*
 static void MmapColdize(Slice mem) {
   MmapColdizeBytes(mem.data(), mem.size());
@@ -133,6 +135,21 @@ static void MmapColdize(const Vec& uv) {
   MmapColdizeBytes(uv.data(), uv.mem_size());
 }
 */
+
+static void MmapAdviseRandom(const void* addr, size_t len) {
+  size_t low = terark::align_up(size_t(addr), 4096);
+  size_t hig = terark::align_down(size_t(addr) + len, 4096);
+  if (low < hig) {
+    size_t size = hig - low;
+#ifdef POSIX_MADV_RANDOM
+    posix_madvise((void*)low, size, POSIX_MADV_RANDOM);
+#elif defined(_MSC_VER) // defined(_WIN32) || defined(_WIN64)
+#endif
+  }
+}
+static void MmapAdviseRandom(fstring mem) {
+  MmapAdviseRandom(mem.data(), mem.size());
+}
 
 
 void UpdateCollectInfo(const TerarkZipTableFactory* table_factory,
@@ -582,7 +599,7 @@ public:
 #endif
 
 
-Status rocksdb::TerarkZipTableTombstone::
+Status TerarkZipTableTombstone::
 LoadTombstone(RandomAccessFileReader * file, uint64_t file_size) {
   BlockContents tombstoneBlock;
   Status s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, 
@@ -752,7 +769,7 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     return s;
   }
   assert(nullptr != props);
-  unique_ptr<TableProperties> uniqueProps(props);
+  table_properties_.reset(props);
   Slice file_data;
   if (table_reader_options_.env_options.use_mmap_reads) {
     s = file->Read(0, file_size, &file_data, nullptr);
@@ -763,21 +780,20 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
       "EnvOptions::use_mmap_reads must be true");
   }
-  if (uniqueProps->comparator_name != fstring(ioptions.user_comparator->Name())) {
+  if (props->comparator_name != fstring(ioptions.user_comparator->Name())) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
-      "Invalid user_comparator , need " + uniqueProps->comparator_name
+      "Invalid user_comparator , need " + props->comparator_name
       + ", but provid " + ioptions.user_comparator->Name());
   }
   file_data_ = file_data;
-  table_properties_.reset(uniqueProps.release());
-  global_seqno_ = GetGlobalSequenceNumber(*table_properties_, ioptions.info_log);
+  global_seqno_ = GetGlobalSequenceNumber(*props, ioptions.info_log);
   s = LoadTombstone(file, file_size);
   if (global_seqno_ == kDisableGlobalSequenceNumber) {
     global_seqno_ = 0;
   }
   INFO(ioptions.info_log
     , "TerarkZipTableReader::Open(): fsize = %zd, entries = %zd keys = 0 indexSize = 0 valueSize = 0, warm up time =      0.000'sec, build cache time =      0.000'sec\n"
-    , size_t(file_size), size_t(table_properties_->num_entries)
+    , size_t(file_size), size_t(props->num_entries)
   );
   return Status::OK();
 }
@@ -794,7 +810,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     return s;
   }
   assert(nullptr != props);
-  unique_ptr<TableProperties> uniqueProps(props);
+  table_properties_.reset(props);
   Slice file_data;
   if (table_reader_options_.env_options.use_mmap_reads) {
     s = file->Read(0, file_size, &file_data, nullptr);
@@ -805,14 +821,13 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
       "EnvOptions::use_mmap_reads must be true");
   }
-  if (uniqueProps->comparator_name != fstring(ioptions.user_comparator->Name())) {
+  if (props->comparator_name != fstring(ioptions.user_comparator->Name())) {
     return Status::InvalidArgument("TerarkZipTableReader::Open()",
-      "Invalid user_comparator , need " + uniqueProps->comparator_name
+      "Invalid user_comparator , need " + props->comparator_name
       + ", but provid " + ioptions.user_comparator->Name());
   }
   file_data_ = file_data;
-  table_properties_.reset(uniqueProps.release());
-  global_seqno_ = GetGlobalSequenceNumber(*table_properties_, ioptions.info_log);
+  global_seqno_ = GetGlobalSequenceNumber(*props, ioptions.info_log);
   isReverseBytewiseOrder_ =
     fstring(ioptions.user_comparator->Name()).startsWith("rev:");
 #if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
@@ -877,17 +892,20 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   if (tzto_.warmUpValueOnOpen) {
     MmapWarmUp(subReader_.store_->get_mmap());
   } else {
-    MmapColdize(subReader_.store_->get_mmap());
+    //MmapColdize(subReader_.store_->get_mmap());
+    if (tzto_.adviseRandomRead) {
+      MmapAdviseRandom(subReader_.store_->get_mmap());
+    }
   }
   long long t1 = g_pf.now();
   subReader_.index_->BuildCache(tzto_.indexCacheRatio);
   long long t2 = g_pf.now();
   INFO(ioptions.info_log
     , "TerarkZipTableReader::Open(): fsize = %zd, entries = %zd keys = %zd indexSize = %zd valueSize=%zd, warm up time = %6.3f'sec, build cache time = %6.3f'sec\n"
-    , size_t(file_size), size_t(table_properties_->num_entries)
+    , size_t(file_size), size_t(props->num_entries)
     , subReader_.index_->NumKeys()
-    , size_t(table_properties_->index_size)
-    , size_t(table_properties_->data_size)
+    , size_t(props->index_size)
+    , size_t(props->data_size)
     , g_pf.sf(t0, t1)
     , g_pf.sf(t1, t2)
   );

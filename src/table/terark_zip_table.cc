@@ -47,14 +47,6 @@ const char* git_version_hash_info_terark_zip_rocksdb();
 #endif
 
 void PrintVersionHashInfo(rocksdb::Logger* info_log) {
-  std::call_once(PrintVersionHashInfoFlag, [info_log] {
-#ifndef _MSC_VER
-    INFO(info_log, "core %s", git_version_hash_info_core());
-    INFO(info_log, "fsa %s", git_version_hash_info_fsa());
-    INFO(info_log, "zbs %s", git_version_hash_info_zbs());
-    INFO(info_log, "terark_zip_rocksdb %s", git_version_hash_info_terark_zip_rocksdb());
-#endif
-  });
 }
 
 
@@ -322,6 +314,7 @@ ret.append(buffer, snprintf(buffer, kBufferSize, fmt "\n", value))
   M_APPEND("minDictZipValueSize      : %zd", tzto.minDictZipValueSize);
   M_APPEND("keyPrefixLen             : %zd", tzto.keyPrefixLen);
   M_APPEND("debugLevel               : %d", (int)tzto.debugLevel);
+  M_APPEND("adviseRandomRead         : %s", cvb[!!tzto.adviseRandomRead]);
   M_APPEND("enableCompressionProbe   : %s", cvb[!!tzto.enableCompressionProbe]);
   M_APPEND("useSuffixArrayLocalMatch : %s", cvb[!!tzto.useSuffixArrayLocalMatch]);
   M_APPEND("warmUpIndexOnOpen        : %s", cvb[!!tzto.warmUpIndexOnOpen]);
