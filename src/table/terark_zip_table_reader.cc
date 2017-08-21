@@ -171,8 +171,22 @@ void UpdateCollectInfo(const TerarkZipTableFactory* table_factory,
 
 }
 
-
 namespace rocksdb {
+
+Status ReadMetaBlockAdapte(RandomAccessFileReader* file,
+                           uint64_t file_size,
+                           uint64_t table_magic_number,
+                           const ImmutableCFOptions& ioptions,
+                           const std::string& meta_block_name,
+                           BlockContents* contents) {
+#if ROCKSDB_MAJOR >= 5 && ROCKSDB_MINOR >= 7
+    return ReadMetaBlock(file, nullptr, file_size, table_magic_number, ioptions,
+        meta_block_name, contents);
+#else
+    return ReadMetaBlock(file, file_size, table_magic_number, ioptions,
+        meta_block_name, contents);
+#endif
+}
 
 using terark::BadCrc32cException;
 using terark::byte_swap;
@@ -453,16 +467,11 @@ protected:
         TryPinBuffer(valueBuf_);
         if (ZipValueType::kMulti == zValtype_) {
           valueBuf_.resize_no_init(sizeof(uint32_t)); // for offsets[valnum_]
-          subReader_->store_->get_record_append(recId, &valueBuf_);
-        }
-        else if (0 == value_data_offset && UINT32_MAX == value_data_length) {
-          valueBuf_.erase_all();
-          subReader_->store_->get_record_append(recId, &valueBuf_);
+          subReader_->GetRecordAppend(recId, &valueBuf_);
         }
         else {
           valueBuf_.erase_all();
-          subReader_->store_->get_slice_append(recId,
-              value_data_offset, value_data_length, &valueBuf_);
+          subReader_->GetRecordAppend(recId, &valueBuf_, value_data_offset, value_data_length);
         }
       }
       catch (const BadCrc32cException& ex) { // crc checksum error
@@ -602,7 +611,7 @@ public:
 Status TerarkZipTableTombstone::
 LoadTombstone(RandomAccessFileReader * file, uint64_t file_size) {
   BlockContents tombstoneBlock;
-  Status s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, 
+  Status s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, 
     GetTableReaderOptions().ioptions,  kRangeDelBlock, &tombstoneBlock);
   if (s.ok()) {
     tombstone_.reset(DetachBlockContents(tombstoneBlock, GetSequenceNumber()));
@@ -624,8 +633,46 @@ NewRangeTombstoneIterator(const ReadOptions & read_options) {
   return nullptr;
 }
 
+void TerarkZipSubReader::InitUsePread(int minPreadLen) {
+  if (minPreadLen < 0) {
+    storeUsePread_ = false;
+  }
+  else if (minPreadLen == 0) {
+    storeUsePread_ = true;
+  }
+  else {
+    size_t numRecords = store_->num_records();
+    size_t memSize = store_->get_mmap().size();
+    storeUsePread_ = memSize < minPreadLen * numRecords;
+  }
+}
+
+void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf,
+                                         uint32_t offset, uint32_t length) const {
+  if (0 == offset && UINT32_MAX == length) {
+    if (storeUsePread_)
+      store_->pread_record_append(storeFD_, storeOffset_, recId, tbuf);
+    else
+      store_->get_record_append(recId, tbuf);
+  }
+  else {
+    assert(0);
+    if (storeUsePread_)
+      assert(0);
+    else
+      store_->get_slice_append(recId, offset, length, tbuf);
+  }
+}
+
+void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf) const {
+  if (storeUsePread_)
+    store_->pread_record_append(storeFD_, storeOffset_, recId, tbuf);
+  else
+    store_->get_record_append(recId, tbuf);
+}
+
 Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& ro, const Slice& ikey,
-  GetContext* get_context, int flag) const {
+                               GetContext* get_context, int flag) const {
   (void)flag;
   MY_THREAD_LOCAL(valvec<byte_t>, g_tbuf);
   ParsedInternalKey pikey;
@@ -661,11 +708,7 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
   case ZipValueType::kZeroSeq:
     g_tbuf.erase_all();
     try {
-      if (0==ro.value_data_offset && UINT32_MAX==ro.value_data_length)
-        store_->get_record_append(recId, &g_tbuf);
-      else // get_slice_append does not support entropy zip
-        store_->get_slice_append(recId,
-          ro.value_data_offset, ro.value_data_length, &g_tbuf);
+      GetRecordAppend(recId, &g_tbuf, ro.value_data_offset, ro.value_data_length);
     }
     catch (const terark::BadChecksumException& ex) {
       return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
@@ -676,11 +719,7 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
   case ZipValueType::kValue: { // should be a kTypeValue, the normal case
     g_tbuf.erase_all();
     try {
-      if (0==ro.value_data_offset && UINT32_MAX==ro.value_data_length)
-        store_->get_record_append(recId, &g_tbuf);
-      else // get_slice_append does not support entropy zip
-        store_->get_slice_append(recId,
-          ro.value_data_offset, ro.value_data_length, &g_tbuf);
+      GetRecordAppend(recId, &g_tbuf, ro.value_data_offset, ro.value_data_length);
     }
     catch (const terark::BadChecksumException& ex) {
       return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
@@ -696,7 +735,7 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
     g_tbuf.erase_all();
     try {
       g_tbuf.reserve(sizeof(SequenceNumber));
-      store_->get_record_append(recId, &g_tbuf);
+      GetRecordAppend(recId, &g_tbuf);
       assert(g_tbuf.size() == sizeof(SequenceNumber) - 1);
     }
     catch (const terark::BadChecksumException& ex) {
@@ -711,7 +750,7 @@ Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& r
   case ZipValueType::kMulti: { // more than one value
     g_tbuf.resize_no_init(sizeof(uint32_t));
     try {
-      store_->get_record_append(recId, &g_tbuf);
+      GetRecordAppend(recId, &g_tbuf);
     }
     catch (const terark::BadChecksumException& ex) {
       return Status::Corruption("TerarkZipTableReader::Get()", ex.what());
@@ -836,9 +875,9 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
 #endif
   BlockContents valueDictBlock, indexBlock, zValueTypeBlock, commonPrefixBlock;
   UpdateCollectInfo(table_factory_, &tzto_, props, file_size);
-  s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
+  s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableValueDictBlock, &valueDictBlock);
-  s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
+  s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableIndexBlock, &indexBlock);
   if (!s.ok()) {
     return s;
@@ -847,7 +886,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   if (global_seqno_ == kDisableGlobalSequenceNumber) {
     global_seqno_ = 0;
   }
-  s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
+  s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableCommonPrefixBlock, &commonPrefixBlock);
   if (s.ok()) {
     subReader_.commonPrefix_.assign(commonPrefixBlock.data.data(),
@@ -875,11 +914,15 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     return s;
   }
   size_t recNum = subReader_.index_->NumKeys();
-  s = ReadMetaBlock(file, file_size, kTerarkZipTableMagicNumber, ioptions,
+  s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableValueTypeBlock, &zValueTypeBlock);
   if (s.ok()) {
     subReader_.type_.risk_set_data((byte_t*)zValueTypeBlock.data.data(), recNum);
   }
+  subReader_.subIndex_ = 0;
+  subReader_.storeFD_ = file_->file()->FileDescriptor();
+  subReader_.storeOffset_ = 0;
+  subReader_.InitUsePread(tzto_.minPreadLen);
   long long t0 = g_pf.now();
   if (tzto_.warmUpIndexOnOpen) {
     MmapWarmUp(fstringOf(indexBlock.data));
@@ -893,7 +936,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     MmapWarmUp(subReader_.store_->get_mmap());
   } else {
     //MmapColdize(subReader_.store_->get_mmap());
-    if (tzto_.adviseRandomRead) {
+    if (tzto_.adviseRandomRead || ioptions.advise_random_on_open) {
       MmapAdviseRandom(subReader_.store_->get_mmap());
     }
   }

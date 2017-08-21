@@ -30,6 +30,13 @@
 
 namespace rocksdb {
 
+Status ReadMetaBlockAdapte(class RandomAccessFileReader* file,
+                           uint64_t file_size,
+                           uint64_t table_magic_number,
+                           const struct ImmutableCFOptions& ioptions,
+                           const std::string& meta_block_name,
+                           struct BlockContents* contents);
+
 class TerarkZipTableTombstone {
 
 private:
@@ -111,6 +118,9 @@ private:
 
 struct TerarkZipSubReader {
   size_t subIndex_;
+  bool   storeUsePread_;
+  int    storeFD_;
+  size_t storeOffset_;
   std::string prefix_;
   unique_ptr<TerarkIndex> index_;
   unique_ptr<terark::BlobStore> store_;
@@ -125,6 +135,10 @@ struct TerarkZipSubReader {
 #endif
   };
 
+  void InitUsePread(int minPreadLen);
+
+  void GetRecordAppend(size_t recId, valvec<byte_t>* tbuf, uint32_t offset, uint32_t length) const;
+  void GetRecordAppend(size_t recId, valvec<byte_t>* tbuf) const;
   Status Get(SequenceNumber, const ReadOptions&, const Slice& key,
     GetContext*, int flag) const;
 

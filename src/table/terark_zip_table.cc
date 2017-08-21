@@ -166,7 +166,12 @@ TerarkZipTableFactory::NewTableReader(
       "user comparator must be 'leveldb.BytewiseComparator'");
   }
   Footer footer;
+
+#if ROCKSDB_MAJOR >= 5 && ROCKSDB_MINOR >= 7
+  Status s = ReadFooterFromFile(file.get(), nullptr, file_size, &footer);
+#else
   Status s = ReadFooterFromFile(file.get(), file_size, &footer);
+#endif
   if (!s.ok()) {
     return s;
   }
@@ -196,7 +201,7 @@ TerarkZipTableFactory::NewTableReader(
   }
 #endif
   BlockContents emptyTableBC;
-  s = ReadMetaBlock(file.get(), file_size, kTerarkZipTableMagicNumber
+  s = ReadMetaBlockAdapte(file.get(), file_size, kTerarkZipTableMagicNumber
     , table_reader_options.ioptions, kTerarkEmptyTableKey, &emptyTableBC);
   if (s.ok()) {
     std::unique_ptr<TerarkEmptyTableReader>
@@ -320,6 +325,7 @@ ret.append(buffer, snprintf(buffer, kBufferSize, fmt "\n", value))
   M_APPEND("warmUpIndexOnOpen        : %s", cvb[!!tzto.warmUpIndexOnOpen]);
   M_APPEND("warmUpValueOnOpen        : %s", cvb[!!tzto.warmUpValueOnOpen]);
   M_APPEND("disableSecondPassIter    : %s", cvb[!!tzto.disableSecondPassIter]);
+  M_APPEND("minPreadLen              : %s", cvb[!!tzto.minPreadLen]);
   M_APPEND("offsetArrayBlockUnits    : %d", (int)tzto.offsetArrayBlockUnits);
   M_APPEND("estimateCompressionRatio : %f", tzto.estimateCompressionRatio);
   M_APPEND("sampleRatio              : %f", tzto.sampleRatio);

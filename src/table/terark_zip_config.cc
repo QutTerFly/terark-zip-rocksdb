@@ -263,6 +263,8 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetDouble(tzo, sampleRatio             , 0.03 );
   MyGetDouble(tzo, indexCacheRatio         , 0.00 );
 
+  MyGetInt(tzo, minPreadLen, -1);
+
   MyGetXiB(tzo, softZipWorkingMemLimit);
   MyGetXiB(tzo, hardZipWorkingMemLimit);
   MyGetXiB(tzo, smallTaskMemory);
