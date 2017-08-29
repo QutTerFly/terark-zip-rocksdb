@@ -1,8 +1,6 @@
 // project headers
 #include "terark_zip_table_reader.h"
 #include "terark_zip_common.h"
-// boost headers
-#include <boost/scope_exit.hpp>
 // rocksdb headers
 #include <table/internal_iterator.h>
 #include <table/sst_file_writer_collectors.h>
@@ -192,12 +190,24 @@ using terark::BadCrc32cException;
 using terark::byte_swap;
 using terark::BlobStore;
 
+class TerarkZipTableIndexIterator : public InternalIterator {
+protected:
+  const TerarkZipSubReader*         subReader_;
+  unique_ptr<TerarkIndex::Iterator> iter_;
+
+public:
+  const TerarkIndex::Iterator* GetIndexIterator() const {
+    return iter_.get();
+  }
+  const TerarkZipSubReader* GetSubReader() const {
+    return subReader_;
+  }
+};
+
 template<bool reverse>
-class TerarkZipTableIterator : public InternalIterator, boost::noncopyable {
+class TerarkZipTableIterator : public TerarkZipTableIndexIterator, boost::noncopyable {
 protected:
   const TableReaderOptions* table_reader_options_;
-  const TerarkZipSubReader* subReader_;
-  unique_ptr<TerarkIndex::Iterator> iter_;
   SequenceNumber          global_seqno_;
   ParsedInternalKey       pInterKey_;
   std::string             interKeyBuf_;
@@ -212,15 +222,18 @@ protected:
   Status                  status_;
   PinnedIteratorsManager* pinned_iters_mgr_;
 
+  using TerarkZipTableIndexIterator::subReader_;
+  using TerarkZipTableIndexIterator::iter_;
+
 public:
   TerarkZipTableIterator(const TableReaderOptions& tro
                        , const TerarkZipSubReader* subReader
                        , const ReadOptions& ro
                        , SequenceNumber global_seqno)
     : table_reader_options_(&tro)
-    , subReader_(subReader)
     , global_seqno_(global_seqno)
   {
+    subReader_ = subReader;
     if (subReader_ != nullptr) {
       iter_.reset(subReader_->index_->NewIterator());
       iter_->SetInvalid();
@@ -565,9 +578,10 @@ protected:
 class TerarkZipTableUint64Iterator : public TerarkZipTableIterator<false> {
 public:
   TerarkZipTableUint64Iterator(const TableReaderOptions& tro
-    , const TerarkZipSubReader *subReader
-    , SequenceNumber global_seqno)
-    : TerarkZipTableIterator<false>(tro, subReader, global_seqno) {
+                             , const TerarkZipSubReader *subReader
+                             , const ReadOptions& ro
+                             , SequenceNumber global_seqno)
+    : TerarkZipTableIterator<false>(tro, subReader, ro, global_seqno) {
   }
 protected:
   typedef TerarkZipTableIterator<false> base_t;
@@ -923,6 +937,8 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   subReader_.storeFD_ = file_->file()->FileDescriptor();
   subReader_.storeOffset_ = 0;
   subReader_.InitUsePread(tzto_.minPreadLen);
+  subReader_.rawReaderOffset_ = 0;
+  subReader_.rawReaderSize_ = indexBlock.data.size() + props->data_size;
   long long t0 = g_pf.now();
   if (tzto_.warmUpIndexOnOpen) {
     MmapWarmUp(fstringOf(indexBlock.data));
@@ -979,10 +995,10 @@ NewIterator(const ReadOptions& ro, Arena* arena, bool skip_filters) {
   if (isUint64Comparator_) {
     if (arena) {
       return new(arena->AllocateAligned(sizeof(TerarkZipTableUint64Iterator)))
-        TerarkZipTableUint64Iterator(table_reader_options_, &subReader_, global_seqno_);
+        TerarkZipTableUint64Iterator(table_reader_options_, &subReader_, ro, global_seqno_);
     }
     else {
-      return new TerarkZipTableUint64Iterator(table_reader_options_, &subReader_, global_seqno_);
+      return new TerarkZipTableUint64Iterator(table_reader_options_, &subReader_, ro, global_seqno_);
     }
   }
 #endif
@@ -1017,6 +1033,10 @@ TerarkZipTableReader::Get(const ReadOptions& ro, const Slice& ikey,
   }
 #endif
   return subReader_.Get(global_seqno_, ro, ikey, get_context, flag);
+}
+
+uint64_t TerarkZipTableReader::ApproximateOffsetOf(const Slice& ikey) {
+  return 0;
 }
 
 TerarkZipTableReader::~TerarkZipTableReader() {

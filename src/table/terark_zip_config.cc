@@ -285,6 +285,11 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
     }
     cfo.compaction_style = kCompactionStyleUniversal;
     cfo.compaction_options_universal.allow_trivial_move = true;
+#define MyGetUniversal_uint(name, Default) \
+    cfo.compaction_options_universal.name = \
+        terark::getEnvLong("TerarkZipTable_" #name, Default)
+    MyGetUniversal_uint(min_merge_width,  5);
+    MyGetUniversal_uint(max_merge_width, 50);
   }
   cfo.write_buffer_size     = uint64_t(1) << 30; // 1G
   cfo.target_file_size_base = uint64_t(1) << 30; // 1G
@@ -293,6 +298,8 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetInt(cfo, max_write_buffer_number    , 5);
   MyGetInt(cfo, target_file_size_multiplier, 5);
   MyGetInt(cfo, num_levels                 , 5);
+  MyGetInt(cfo, level0_file_num_compaction_trigger,
+           cfo. level0_file_num_compaction_trigger);
 
   if (tzo.debugLevel) {
     STD_INFO("TerarkZipConfigFromEnv(dbo, cfo) successed\n");

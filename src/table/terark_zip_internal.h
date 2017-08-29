@@ -145,7 +145,29 @@ struct ZipValueMultiValue {
   }
 };
 
+struct TerarkZipMultiOffsetInfo {
+  struct KeyValueOffset {
+    size_t key;
+    size_t value;
+    size_t type;
+    size_t commonPrefix;
+  };
+  size_t partCount_, prefixLen_;
+  valvec<KeyValueOffset> offset_;
+  valvec<char> prefixSet_;
 
+  static size_t calc_size(size_t prefixLen, size_t partCount);
+  void Init(size_t prefixLen, size_t partCount);
+  void set(size_t index
+    , fstring prefix
+    , size_t key
+    , size_t value
+    , size_t type
+    , size_t commonPrefix);
+  valvec<byte_t> dump();
+  bool risk_set_memory(const void*, size_t);
+  void risk_release_ownership();
+};
 
 class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
 public:

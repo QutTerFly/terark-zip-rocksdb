@@ -98,6 +98,8 @@ TerarkZipTableBuilder::TerarkZipTableBuilder(const TerarkZipTableFactory* table_
   singleIndexMemLimit = std::min(table_options_.softZipWorkingMemLimit,
     table_options_.singleIndexMemLimit);
 
+  estimateRatio_ = table_factory_->GetCollect().estimate(table_options_.estimateCompressionRatio);
+
   properties_.fixed_key_len = 0;
   properties_.num_data_blocks = 1;
   properties_.column_family_id = column_family_id;
@@ -186,9 +188,6 @@ TerarkZipTableBuilder::~TerarkZipTableBuilder() {
 uint64_t TerarkZipTableBuilder::FileSize() const {
   if (0 == offset_) {
     // for compaction caller to split file by increasing size
-    auto kvLen = properties_.raw_key_size + properties_.raw_value_size;
-    auto fsize = uint64_t(kvLen *
-        table_factory_->GetCollect().estimate(table_options_.estimateCompressionRatio));
     size_t nltTrieMemSize = 0;
     for (auto& item : histogram_) {
       for (auto& ptr : item.build) {
@@ -199,7 +198,7 @@ uint64_t TerarkZipTableBuilder::FileSize() const {
     }
     nltTrieMemSize = nltTrieMemSize * 3 / 2;
     if (nltTrieMemSize < table_options_.softZipWorkingMemLimit) {
-      return fsize;
+      return estimateOffset_;
     }
     else {
       return 1ULL << 60; // notify rocksdb to `Finish()` this table asap.
@@ -229,10 +228,19 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
         ikey.DebugString(true).c_str(), value.ToString(true).c_str());
   }
   DEBUG_PRINT_1ST_PASS_KEY(key);
+
+  ++properties_.num_entries;
+  properties_.raw_key_size += key.size();
+  properties_.raw_value_size += value.size();
+  uint64_t offset = uint64_t((properties_.raw_key_size + properties_.raw_value_size)
+                             * estimateRatio_);
+  assert(offset >= estimateOffset_);
+  NotifyCollectTableCollectorsOnAdd(key, value, offset,
+                                    collectors_, ioptions_.info_log);
+  estimateOffset_ = offset;
+
   uint64_t seqType = DecodeFixed64(key.data() + key.size() - 8);
   ValueType value_type = ValueType(seqType & 255);
-  uint64_t offset = uint64_t((properties_.raw_key_size + properties_.raw_value_size)
-    * table_options_.estimateCompressionRatio);
   if (IsValueType(value_type)) {
     assert(key.size() >= 8);
     fstring userKey(key.data(), key.size() - 8);
@@ -298,19 +306,9 @@ void TerarkZipTableBuilder::Add(const Slice& key, const Slice& value) {
         tmpValueFile_.writer << fstringOf(value);
       }
     }
-    properties_.num_entries++;
-    properties_.raw_key_size += key.size();
-    properties_.raw_value_size += value.size();
-    NotifyCollectTableCollectorsOnAdd(key, value, offset,
-      collectors_, ioptions_.info_log);
   }
   else if (value_type == kTypeRangeDeletion) {
     range_del_block_.Add(key, value);
-    properties_.num_entries++;
-    properties_.raw_key_size += key.size();
-    properties_.raw_value_size += value.size();
-    NotifyCollectTableCollectorsOnAdd(key, value, offset,
-      collectors_, ioptions_.info_log);
   }
   else {
     assert(false);
@@ -444,7 +442,9 @@ Status TerarkZipTableBuilder::EmptyTableFinish() {
     }
   }
   range_del_block_.Reset();
-  return WriteMetaData({
+  TerarkZipMultiOffsetInfo offsetInfo;
+  offsetInfo.Init(0, 0);
+  return WriteMetaData(offsetInfo, {
     { &kTerarkEmptyTableKey                         , emptyTableBH  },
     { !tombstoneBH.IsNull() ? &kRangeDelBlock : NULL, tombstoneBH   },
   });
@@ -1058,7 +1058,16 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
   if (!s.ok()) {
     return s;
   }
-  WriteMetaData({
+  properties_.num_data_blocks = kvs.key.m_cnt_sum;
+  TerarkZipMultiOffsetInfo offsetInfo;
+  offsetInfo.Init(0, 1);
+  offsetInfo.set(0,
+                 fstring(),
+                 indexBlock.size(),
+                 properties_.data_size,
+                 zvTypeBlock.size(),
+                 commonPrefixBlock.size());
+  WriteMetaData(offsetInfo, {
     { dict.memory.size() ? &kTerarkZipTableValueDictBlock : NULL   , dictBlock         },
     { &kTerarkZipTableIndexBlock                                   , indexBlock        },
     { !zvTypeBlock.IsNull() ? &kTerarkZipTableValueTypeBlock : NULL, zvTypeBlock       },
@@ -1158,7 +1167,8 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
 }
 
 
-Status TerarkZipTableBuilder::WriteMetaData(std::initializer_list<std::pair<const std::string*, BlockHandle> > blocks) {
+Status TerarkZipTableBuilder::WriteMetaData(const TerarkZipMultiOffsetInfo& offsetInfo,
+                                            std::initializer_list<std::pair<const std::string*, BlockHandle>> blocks) {
   MetaIndexBuilder metaindexBuiler;
   for (const auto& block : blocks) {
     if (block.first) {
@@ -1167,9 +1177,16 @@ Status TerarkZipTableBuilder::WriteMetaData(std::initializer_list<std::pair<cons
   }
   PropertyBlockBuilder propBlockBuilder;
   propBlockBuilder.AddTableProperty(properties_);
-  NotifyCollectTableCollectorsOnFinish(collectors_,
-    ioptions_.info_log,
-    &propBlockBuilder);
+  UserCollectedProperties user_collected_properties;
+  for (auto& collector : collectors_) {
+    user_collected_properties.clear();
+    Status s = collector->Finish(&user_collected_properties);
+    if (!s.ok()) {
+      LogPropertiesCollectionError(ioptions_.info_log, "Finish", collector->Name());
+      continue;
+    }
+    propBlockBuilder.Add(user_collected_properties);
+  }
   propBlockBuilder.Add(kTerarkZipTableBuildTimestamp, GetTimestamp());
   BlockHandle propBlock, metaindexBlock;
   Status s = WriteBlock(propBlockBuilder.Finish(), file_, &offset_, &propBlock);
