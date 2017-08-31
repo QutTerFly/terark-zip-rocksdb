@@ -554,6 +554,7 @@ Status TerarkZipTableBuilder::WaitBuildIndex() {
     kvs.indexFileBegin = offset;
     for (auto& ptr : kvs.build) {
       auto& param = *ptr;
+      assert(param.wait.valid());
       auto subResult = param.wait.get();
       offset += param.indexFileEnd - param.indexFileBegin;
       commonPrefixLength = std::min(commonPrefixLength, param.stat.commonPrefixLen);
@@ -1249,8 +1250,19 @@ Status TerarkZipTableBuilder::OfflineFinish() {
 }
 
 void TerarkZipTableBuilder::Abandon() {
-  WaitBuildIndex();
+  assert(!closed_);
   closed_ = true;
+  for (auto& kvs : histogram_) {
+    for (auto& ptr : kvs.build) {
+      auto& param = *ptr;
+      if (param.wait.valid()) {
+        param.wait.get();
+      }
+      else {
+        param.data.complete_write();
+      }
+    }
+  }
   histogram_.clear();
   tmpValueFile_.complete_write();
   tmpSampleFile_.complete_write();
