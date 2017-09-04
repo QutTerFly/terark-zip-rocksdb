@@ -117,6 +117,7 @@ private:
 };
 
 struct TerarkZipSubReader {
+  LruReadonlyCache* cache_ = nullptr;
   size_t subIndex_;
   size_t rawReaderOffset_;
   size_t rawReaderSize_;

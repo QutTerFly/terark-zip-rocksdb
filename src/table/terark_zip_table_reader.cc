@@ -10,6 +10,10 @@
 #include <terark/lcast.hpp>
 #include <terark/util/crc.hpp>
 
+#ifndef _MSC_VER
+# include <sys/unistd.h>
+# include <fcntl.h>
+#endif
 
 namespace {
 using namespace rocksdb;
@@ -665,7 +669,7 @@ void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf,
                                          uint32_t offset, uint32_t length) const {
   if (0 == offset && UINT32_MAX == length) {
     if (storeUsePread_)
-      store_->pread_record_append(storeFD_, storeOffset_, recId, tbuf);
+      store_->pread_record_append(cache_, storeFD_, storeOffset_, recId, tbuf);
     else
       store_->get_record_append(recId, tbuf);
   }
@@ -680,7 +684,7 @@ void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf,
 
 void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf) const {
   if (storeUsePread_)
-    store_->pread_record_append(storeFD_, storeOffset_, recId, tbuf);
+    store_->pread_record_append(cache_, storeFD_, storeOffset_, recId, tbuf);
   else
     store_->get_record_append(recId, tbuf);
 }
@@ -939,6 +943,12 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   subReader_.InitUsePread(tzto_.minPreadLen);
   subReader_.rawReaderOffset_ = 0;
   subReader_.rawReaderSize_ = indexBlock.data.size() + props->data_size;
+  if (subReader_.storeUsePread_) {
+    subReader_.cache_ = table_factory_->cache();
+    if (subReader_.cache_) {
+      subReader_.storeFD_ = subReader_.cache_->open(subReader_.storeFD_);
+    }
+  }
   long long t0 = g_pf.now();
   if (tzto_.warmUpIndexOnOpen) {
     MmapWarmUp(fstringOf(indexBlock.data));
@@ -948,7 +958,7 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
       }
     }
   }
-  if (tzto_.warmUpValueOnOpen) {
+  if (tzto_.warmUpValueOnOpen && !subReader_.storeUsePread_) {
     MmapWarmUp(subReader_.store_->get_mmap());
   } else {
     //MmapColdize(subReader_.store_->get_mmap());
@@ -1040,6 +1050,11 @@ uint64_t TerarkZipTableReader::ApproximateOffsetOf(const Slice& ikey) {
 }
 
 TerarkZipTableReader::~TerarkZipTableReader() {
+  if (subReader_.storeUsePread_) {
+    if (subReader_.cache_) {
+      subReader_.cache_->close(subReader_.storeFD_);
+    }
+  }
 }
 
 TerarkZipTableReader::TerarkZipTableReader(const TerarkZipTableFactory* table_factory,
