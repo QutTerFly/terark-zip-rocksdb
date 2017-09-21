@@ -209,7 +209,7 @@ public:
 };
 
 template<bool reverse>
-class TerarkZipTableIterator : public TerarkZipTableIndexIterator, boost::noncopyable {
+class TerarkZipTableIterator : public TerarkZipTableIndexIterator {
 protected:
   const TableReaderOptions* table_reader_options_;
   SequenceNumber          global_seqno_;
@@ -666,7 +666,8 @@ void TerarkZipSubReader::InitUsePread(int minPreadLen) {
 }
 
 void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf,
-                                         uint32_t offset, uint32_t length) const {
+                                         uint32_t offset, uint32_t length)
+const {
   if (0 == offset && UINT32_MAX == length) {
     if (storeUsePread_)
       store_->pread_record_append(cache_, storeFD_, storeOffset_, recId, tbuf);
@@ -682,15 +683,18 @@ void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf,
   }
 }
 
-void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf) const {
+void TerarkZipSubReader::GetRecordAppend(size_t recId, valvec<byte_t>* tbuf)
+const {
   if (storeUsePread_)
     store_->pread_record_append(cache_, storeFD_, storeOffset_, recId, tbuf);
   else
     store_->get_record_append(recId, tbuf);
 }
 
-Status TerarkZipSubReader::Get(SequenceNumber global_seqno, const ReadOptions& ro, const Slice& ikey,
-                               GetContext* get_context, int flag) const {
+Status TerarkZipSubReader::Get(SequenceNumber global_seqno,
+                               const ReadOptions& ro, const Slice& ikey,
+                               GetContext* get_context, int flag)
+const {
   (void)flag;
   MY_THREAD_LOCAL(valvec<byte_t>, g_tbuf);
   ParsedInternalKey pikey;

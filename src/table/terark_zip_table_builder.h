@@ -123,7 +123,7 @@ private:
   Status ZipValueToFinish();
   void DebugPrepare();
   void DebugCleanup();
-  void BuilderWriteValues(NativeDataInput<InputBuffer>& tmpValueFileinput
+  Status BuilderWriteValues(NativeDataInput<InputBuffer>& tmpValueFileinput
     , KeyValueStatus& kvs, std::function<void(fstring val)> write);
   void DoWriteAppend(const void* data, size_t size);
   Status WriteStore(fstring indexMmap, BlobStore* store
@@ -151,6 +151,7 @@ private:
   TerarkIndex::KeyStat *currentStat_ = nullptr;
   valvec<byte_t> prevUserKey_;
   terark::febitvec valueBits_;
+  size_t bitPosUnique_ = 0;
   TempFileDeleteOnClose tmpValueFile_;
   TempFileDeleteOnClose tmpSampleFile_;
   AutoDeleteFile tmpIndexFile_;
