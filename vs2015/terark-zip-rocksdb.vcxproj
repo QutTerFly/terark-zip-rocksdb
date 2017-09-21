@@ -63,9 +63,9 @@
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -91,6 +91,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
     <LibraryPath>..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
+    <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
+    <LibraryPath>..\..\rocksdb\msvc14\Release;..\..\terark\vs2015\terark-fsa\x64\Release;$(LibraryPath)</LibraryPath>
     <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -131,6 +136,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;SNAPPY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
