@@ -43,8 +43,8 @@ public:
   };
   struct KeyStat {
     size_t commonPrefixLen = 0;
-    size_t minKeyLen = 0;
-    size_t maxKeyLen = size_t(-1);
+    size_t minKeyLen = size_t(-1);
+    size_t maxKeyLen = 0;
     size_t sumKeyLen = 0;
     size_t numKeys   = 0;
     valvec<byte_t> minKey;
@@ -86,7 +86,7 @@ public:
 	  BOOST_STATIC_ASSERT(sizeof(BOOST_STRINGIZE(clazz)) <= 60);  \
     TerarkIndex::AutoRegisterFactory                            \
     g_AutoRegister_##clazz(                                     \
-        {#clazz,##__VA_ARGS__},                                 \
+        {__VA_ARGS__,#clazz},                                   \
         typeid(clazz).name(),                                   \
         new clazz::MyFactory()                                  \
     )
