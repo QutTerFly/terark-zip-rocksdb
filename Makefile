@@ -23,12 +23,12 @@ rdir:=${BUILD_ROOT}/rls
 
 gen_sh := $(dir $(lastword ${MAKEFILE_LIST}))gen_env_conf.sh
 
-err := $(shell env BOOST_INC=${BOOST_INC} bash ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk; echo $$?)
+err := $(shell env bash ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk; echo $$?)
 ifneq "${err}" "0"
    $(error err = ${err} MAKEFILE_LIST = ${MAKEFILE_LIST}, PWD = ${PWD}, gen_sh = ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk)
 endif
 
-TERARK_INC := -I../terark/src -I./3rdparty -I./3rdparty/Cyan4973
+TERARK_INC := -I../terark/src -I./3rdparty -I./3rdparty/Cyan4973 ${BOOST_INC}
 
 include ${BUILD_ROOT}/env.mk
 
