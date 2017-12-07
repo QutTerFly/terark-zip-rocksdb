@@ -22,7 +22,9 @@
     <ClCompile Include="..\3rdparty\Cyan4973\xxhash.c" />
     <ClCompile Include="..\src\table\terark_zip_common.cc" />
     <ClCompile Include="..\src\table\terark_zip_config.cc" />
-    <ClCompile Include="..\src\table\terark_zip_index.cc" />
+    <ClCompile Include="..\src\table\terark_zip_index.cc">
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="..\src\table\terark_zip_table.cc" />
     <ClCompile Include="..\src\table\terark_zip_table_builder.cc" />
     <ClCompile Include="..\src\table\terark_zip_table_reader.cc" />
