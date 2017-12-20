@@ -102,7 +102,7 @@ void verify(const std::string& signedFile, const std::string& publicKey) {
   using json = nlohmann::json;
   FileSource pubFile(publicKey.c_str(), true, new Base64Decoder);
   RsaWithSha256::Verifier pub(pubFile);
-  
+
   json signedJson = json::parse(std::ifstream(signedFile, std::ios::binary));
   std::string strSign = signedJson["sign"].get<std::string>();
   StringSource signedSource(strSign, true, new Base64Decoder);
