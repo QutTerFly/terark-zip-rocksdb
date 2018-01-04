@@ -3,6 +3,7 @@ DBG_FLAGS ?= -g3 -D_DEBUG
 RLS_FLAGS ?= -O3 -DNDEBUG -g3
 WITH_BMI2 ?= $(shell sh ./cpu_has_bmi2.sh)
 ROCKSDB_SRC ?= ../rocksdb
+TERARK_CORE_HOME ?= ../terark
 
 ifeq "$(origin LD)" "default"
   LD := ${CXX}
@@ -15,7 +16,7 @@ tmpfile := $(shell mktemp compiler-XXXXXX)
 COMPILER := $(shell ${CXX} tools/configure/compiler.cpp -o ${tmpfile}.exe && ./${tmpfile}.exe && rm -f ${tmpfile}*)
 #$(error COMPILER=${COMPILER})
 UNAME_MachineSystem := $(shell uname -m -s | sed 's:[ /]:-:g')
-TerarkLibDir := ../terark/build/${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}/lib
+TerarkLibDir := ${TERARK_CORE_HOME}/build/${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}/lib
 BUILD_NAME := ${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}
 BUILD_ROOT := build/${BUILD_NAME}${TERARK_ZIP_TRIAL_VERSION}
 ddir:=${BUILD_ROOT}/dbg
@@ -28,7 +29,7 @@ ifneq "${err}" "0"
    $(error err = ${err} MAKEFILE_LIST = ${MAKEFILE_LIST}, PWD = ${PWD}, gen_sh = ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk)
 endif
 
-TERARK_INC := -I../terark/src -I./3rdparty -I./3rdparty/Cyan4973 ${BOOST_INC}
+TERARK_INC := -I${TERARK_CORE_HOME}/src -I./3rdparty -I./3rdparty/Cyan4973 ${BOOST_INC}
 
 include ${BUILD_ROOT}/env.mk
 
