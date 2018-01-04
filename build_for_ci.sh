@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_DIR=/newssd1/temp
+BASE_DIR=/ci_build/
 
 echo "start pulling from terark-zip-rocksdb..."
 cd ${BASE_DIR}/terark-zip-rocksdb
