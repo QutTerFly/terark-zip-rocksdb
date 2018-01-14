@@ -45,6 +45,15 @@
     <ProjectReference Include="..\..\snappy-windows-1.1.1.8\src\snappy.vcxproj">
       <Project>{6819c17d-58df-4f01-8e5b-86a6d5a1b29c}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-core\terark-core.vcxproj">
+      <Project>{c5ecd2a9-c18e-4c04-b2f1-c5d6f236f5ae}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-fsa\terark-fsa.vcxproj">
+      <Project>{c5ecd2a1-c18e-4c04-b2fa-c5c6f206f5ae}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-zbs\terark-zbs.vcxproj">
+      <Project>{c5ecd2a1-c35e-4ce4-befa-c5c6f206f5ae}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
