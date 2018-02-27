@@ -92,6 +92,7 @@ else
 	CPU += -mno-bmi -mno-bmi2
 endif
 
+COMMON_C_FLAGS  += -Wa,-mbig-obj
 COMMON_C_FLAGS  += -Wformat=2 -Wcomment
 COMMON_C_FLAGS  += -Wall -Wextra
 COMMON_C_FLAGS  += -Wno-unused-parameter
