@@ -42,6 +42,7 @@ ifeq (CYGWIN, ${UNAME_System})
 				   -Wl,--enable-auto-import
   DLL_SUFFIX = .dll.a
   CYG_DLL_FILE = $(shell echo $@ | sed 's:\(.*\)/lib\([^/]*\)\.a$$:\1/cyg\2:')
+  COMMON_C_FLAGS  += -Wa,-mbig-obj
 else
   ifeq (Darwin,${UNAME_System})
     DLL_SUFFIX = .dylib
@@ -92,7 +93,6 @@ else
 	CPU += -mno-bmi -mno-bmi2
 endif
 
-COMMON_C_FLAGS  += -Wa,-mbig-obj
 COMMON_C_FLAGS  += -Wformat=2 -Wcomment
 COMMON_C_FLAGS  += -Wall -Wextra
 COMMON_C_FLAGS  += -Wno-unused-parameter
