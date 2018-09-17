@@ -18,54 +18,17 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\3rdparty\Cyan4973\xxhash.c" />
-    <ClCompile Include="..\src\table\terark_zip_common.cc" />
-    <ClCompile Include="..\src\table\terark_zip_config.cc" />
-    <ClCompile Include="..\src\table\terark_zip_index.cc">
-      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="..\src\table\terark_zip_table.cc" />
-    <ClCompile Include="..\src\table\terark_zip_table_builder.cc" />
-    <ClCompile Include="..\src\table\terark_zip_table_reader.cc" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\3rdparty\Cyan4973\xxhash.h" />
-    <ClInclude Include="..\src\table\terark_zip_common.h" />
-    <ClInclude Include="..\src\table\terark_zip_index.h" />
-    <ClInclude Include="..\src\table\terark_zip_internal.h" />
-    <ClInclude Include="..\src\table\terark_zip_table.h" />
-    <ClInclude Include="..\src\table\terark_zip_table_builder.h" />
-    <ClInclude Include="..\src\table\terark_zip_table_reader.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\rocksdb\msvc14\rocksdb.vcxproj">
-      <Project>{9b0ec5aa-adfe-3d4e-ba5b-e09577b15447}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\snappy-windows-1.1.1.8\src\snappy.vcxproj">
-      <Project>{6819c17d-58df-4f01-8e5b-86a6d5a1b29c}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-core\terark-core.vcxproj">
-      <Project>{c5ecd2a9-c18e-4c04-b2f1-c5d6f236f5ae}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-fsa\terark-fsa.vcxproj">
-      <Project>{c5ecd2a1-c18e-4c04-b2fa-c5c6f206f5ae}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-zbs\terark-zbs.vcxproj">
-      <Project>{c5ecd2a1-c35e-4ce4-befa-c5c6f206f5ae}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{D0852590-2E24-4259-B060-7CEAA6C3B9CC}</ProjectGuid>
-    <RootNamespace>terarkziprocksdb</RootNamespace>
+    <ProjectGuid>{61F8D43C-1505-45A8-BCED-6EA25B819C0C}</ProjectGuid>
+    <RootNamespace>crypto_tools</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -76,15 +39,15 @@
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -106,34 +69,33 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
-    <LibraryPath>..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
-    <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
+    <IncludePath>C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
+    <SourcePath>..\..\terark\3rdparty\getopt_win;$(SourcePath)</SourcePath>
+    <LibraryPath>C:\osc\cryptopp\include\cryptopp\x64\Output\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
-    <LibraryPath>..\..\rocksdb\msvc14\Release;..\..\terark\vs2015\terark-fsa\x64\Release;$(LibraryPath)</LibraryPath>
-    <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
+    <IncludePath>..\..\terark\3rdparty\getopt_win;..\3rdparty;$(IncludePath)</IncludePath>
+    <LibraryPath>..\3rdparty\cryptopp\x64\Output\Release;$(LibraryPath)</LibraryPath>
+    <SourcePath>..\..\terark\3rdparty\getopt_win;$(SourcePath)</SourcePath>
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>cryptlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;SNAPPY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-    <Link>
-      <AdditionalDependencies>terark-zbs-d.lib;terark-fsa-d.lib;terark-core-d.lib;rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -155,13 +117,20 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;SNAPPY;NDEBUG=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>cryptlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\terark\3rdparty\getopt_win\getopt.c" />
+    <ClCompile Include="..\tools\crypto_tools\crypto_tools.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\terark\3rdparty\getopt_win\getopt.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

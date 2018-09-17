@@ -3,7 +3,6 @@ DBG_FLAGS ?= -g3 -D_DEBUG
 RLS_FLAGS ?= -O3 -DNDEBUG -g3
 WITH_BMI2 ?= $(shell sh ./cpu_has_bmi2.sh)
 ROCKSDB_SRC ?= ../rocksdb
-TERARK_CORE_HOME ?= ../terark
 
 ifeq "$(origin LD)" "default"
   LD := ${CXX}
@@ -16,7 +15,7 @@ tmpfile := $(shell mktemp compiler-XXXXXX)
 COMPILER := $(shell ${CXX} tools/configure/compiler.cpp -o ${tmpfile}.exe && ./${tmpfile}.exe && rm -f ${tmpfile}*)
 #$(error COMPILER=${COMPILER})
 UNAME_MachineSystem := $(shell uname -m -s | sed 's:[ /]:-:g')
-TerarkLibDir ?= ${TERARK_CORE_HOME}/build/${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}/lib
+TerarkLibDir := ../terark/build/${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}/lib
 BUILD_NAME := ${UNAME_MachineSystem}-${COMPILER}-bmi2-${WITH_BMI2}
 BUILD_ROOT := build/${BUILD_NAME}${TERARK_ZIP_TRIAL_VERSION}
 ddir:=${BUILD_ROOT}/dbg
@@ -24,12 +23,12 @@ rdir:=${BUILD_ROOT}/rls
 
 gen_sh := $(dir $(lastword ${MAKEFILE_LIST}))gen_env_conf.sh
 
-err := $(shell env bash ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk; echo $$?)
+err := $(shell env BOOST_INC=${BOOST_INC} bash ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk; echo $$?)
 ifneq "${err}" "0"
    $(error err = ${err} MAKEFILE_LIST = ${MAKEFILE_LIST}, PWD = ${PWD}, gen_sh = ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk)
 endif
 
-TERARK_INC := -I${TERARK_CORE_HOME}/src -I./3rdparty -I./3rdparty/Cyan4973 ${BOOST_INC}
+TERARK_INC := -I../terark/src -I../cryptopp/include -I../json/include -I../terark/3rdparty/xxHash
 
 include ${BUILD_ROOT}/env.mk
 
@@ -42,7 +41,6 @@ ifeq (CYGWIN, ${UNAME_System})
 				   -Wl,--enable-auto-import
   DLL_SUFFIX = .dll.a
   CYG_DLL_FILE = $(shell echo $@ | sed 's:\(.*\)/lib\([^/]*\)\.a$$:\1/cyg\2:')
-  COMMON_C_FLAGS  += -Wa,-mbig-obj
 else
   ifeq (Darwin,${UNAME_System})
     DLL_SUFFIX = .dylib
@@ -113,7 +111,7 @@ endif
 #CXXFLAGS += -fdump-translation-unit -fdump-class-hierarchy
 
 override CFLAGS += ${COMMON_C_FLAGS}
-override CXXFLAGS += ${COMMON_C_FLAGS}
+override CXXFLAGS += ${COMMON_C_FLAGS} -DTerocksPrivateCode
 #$(error ${CXXFLAGS} "----" ${COMMON_C_FLAGS})
 
 DEFS := -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
@@ -130,6 +128,32 @@ override CXXFLAGS += ${DEFS}
 override INCS := ${TERARK_INC} ${INCS}
 override INCS += -I${ROCKSDB_SRC} -I${ROCKSDB_SRC}/include
 
+ifeq (, $(findstring ${BOOST_INC}, ${INCS} /usr/include /usr/local/include))
+  override INCS += -I${BOOST_INC}
+endif
+
+ifeq (, $(findstring ${BOOST_LIB}, /usr/lib64 /usr/lib /usr/local/lib))
+  override LIBS += -L${BOOST_LIB}
+endif
+
+#override INCS += -I/usr/include
+override LIBS += -L../cryptopp -lcryptopp
+
+ifeq "1" "0"
+ifeq ($(shell test -d /usr/local/lib64 && echo 1),1)
+  override LIBS += -L/usr/local/lib64
+endif
+ifeq ($(shell test -d /usr/local/lib && echo 1),1)
+  override LIBS += -L/usr/local/lib
+endif
+ifeq ($(shell test -d /usr/lib64 && echo 1),1)
+  override LIBS += -L/usr/lib64
+endif
+ifeq ($(shell test -d /usr/lib && echo 1),1)
+  override LIBS += -L/usr/lib
+endif
+endif
+
 #LIBS += -ldl
 #LIBS += -lpthread
 
@@ -143,7 +167,7 @@ override CXXFLAGS += ${extf}
 #CXXFLAGS += -fnothrow-opt
 
 override INCS += -I/opt/include
-override LIBS += -L/opt/lib -Wl,-Bstatic -lcrypto -Wl,-Bdynamic
+override LIBS += -L/opt/lib
 
 ifeq (, ${prefix})
 	ifeq (root, ${USER})
@@ -154,7 +178,6 @@ ifeq (, ${prefix})
 endif
 TerarkZipRocks_lib := terark-zip-rocksdb${TERARK_ZIP_TRIAL_VERSION}
 TerarkZipRocks_src := $(wildcard src/table/*.cc)
-TerarkZipRocks_src += ${BUILD_ROOT}/git-version-terark_zip_rocksdb.cpp
 
 LIB_TERARK_D := -L${TerarkLibDir} -lterark-zbs-${COMPILER}-d -lterark-fsa-${COMPILER}-d -lterark-core-${COMPILER}-d
 LIB_TERARK_R := -L${TerarkLibDir} -lterark-zbs-${COMPILER}-r -lterark-fsa-${COMPILER}-r -lterark-core-${COMPILER}-r
@@ -210,9 +233,7 @@ ${static_TerarkZipRocks_r} : $(call objs,TerarkZipRocks,r)
 TarBallBaseName := ${TerarkZipRocks_lib}-${BUILD_NAME}
 TarBall := pkg/${TerarkZipRocks_lib}-${BUILD_NAME}
 .PHONY : pkg
-.PHONY : tgz
-pkg : ${TarBall}
-tgz : ${TarBall}.tgz
+pkg : ${TarBall}.tgz
 scp : ${TarBall}.tgz.scp.done
 oss : ${TarBall}.tgz.oss.done
 ${TarBall}.tgz.scp.done: ${TarBall}.tgz
@@ -225,9 +246,9 @@ endif
 	ossutil.sh cp   $< oss://${OSS_ROOT}/terarkdb/${REVISION}/$(notdir $<) -f
 	touch $@
 
-${TarBall}: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
-            ${TerarkZipRocks_r} ${static_TerarkZipRocks_r} \
-            $(wildcard ${TerarkLibDir}/libterark-*)
+${TarBall}.tgz: ${TerarkZipRocks_d} ${static_TerarkZipRocks_d} \
+                ${TerarkZipRocks_r} ${static_TerarkZipRocks_r} \
+                $(wildcard ${TerarkLibDir}/libterark-*)
 	rm -rf ${TarBall}
 	mkdir -p ${TarBall}/lib
 	mkdir -p ${TarBall}/bin
@@ -262,10 +283,7 @@ ifeq (${PKG_WITH_ROCKSDB},1)
   ifeq (${PKG_WITH_STATIC},1)
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.a* ${TarBall}/lib_static
   endif
-	cp -a /usr/lib64/libzstd.so*                                       ${TarBall}/lib
 	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/librocksdb.so* ${TarBall}/lib
-	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/db_bench       ${TarBall}/bin
-	cp -a ../rocksdb/${UNAME_MachineSystem}-${COMPILER}/ldb            ${TarBall}/bin
 endif
 	cp -a ${BUILD_ROOT}/lib/lib${TerarkZipRocks_lib}-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
 	cp -a ${TerarkLibDir}/libterark-zbs-{${COMPILER}-,}r${DLL_SUFFIX} ${TarBall}/lib
@@ -275,29 +293,7 @@ endif
 	cp src/table/terark_zip_weak_function.h   ${TarBall}/include/table
 	echo $(shell date "+%Y-%m-%d %H:%M:%S") > ${TarBall}/package.buildtime.txt
 	echo $(shell git log | head -n1) >> ${TarBall}/package.buildtime.txt
-
-${TarBall}.tgz: ${TarBall}
 	cd pkg; tar czf ${TarBallBaseName}.tgz ${TarBallBaseName}
-
-.PHONY: git-version.phony
-${BUILD_ROOT}/git-version-%.cpp: git-version.phony
-	@mkdir -p $(dir $@)
-	@rm -f $@.tmp
-	@echo '__attribute__ ((visibility ("default"))) const char*' \
-		  'git_version_hash_info_'$(patsubst git-version-%.cpp,%,$(notdir $@))\
-		  '() { return R"StrLiteral(git_version_hash_info_is:' > $@.tmp
-	@env LC_ALL=C git log -n1 >> $@.tmp
-	@env LC_ALL=C git diff >> $@.tmp
-	@env LC_ALL=C $(CXX) --version >> $@.tmp
-	@echo cpu_flag: $(CPU) >> $@.tmp
-	@echo ')''StrLiteral";}' >> $@.tmp
-	@#      ^^----- To prevent diff causing git-version compile fail
-	@if test -f "$@" && cmp "$@" $@.tmp; then \
-		rm $@.tmp; \
-	else \
-		mv $@.tmp $@; \
-	fi
-
 
 %${DLL_SUFFIX}:
 	@echo "----------------------------------------------------------------------------------"

@@ -23,6 +23,7 @@
 #include <table/table_builder.h>
 #include <table/block_builder.h>
 #include <table/format.h>
+#include <table/internal_iterator.h>
 #include <util/arena.h>
 // terark headers
 #include <terark/fstring.hpp>
@@ -30,11 +31,12 @@
 #include <terark/bitmap.hpp>
 #include <terark/stdtypes.hpp>
 #include <terark/histogram.hpp>
-#include <terark/zbs/blob_store.hpp>
+#include <terark/zbs/abstract_blob_store.hpp>
 #include <terark/zbs/dict_zip_blob_store.hpp>
 #include <terark/zbs/zip_reorder_map.hpp>
 #include <terark/bitfield_array.hpp>
 #include <terark/util/fstrvec.hpp>
+#include <terark/thread/pipeline.hpp>
 
 namespace rocksdb {
 
@@ -44,10 +46,11 @@ using terark::valvec;
 using terark::UintVecMin0;
 using terark::byte_t;
 using terark::febitvec;
-using terark::BlobStore;
+using terark::AbstractBlobStore;
 using terark::ZReorderMap;
 using terark::Uint64Histogram;
 using terark::DictZipBlobStore;
+using terark::PipelineProcessor;
 
 class TerarkZipTableBuilder : public TableBuilder, boost::noncopyable {
 public:
@@ -64,6 +67,7 @@ public:
   void Add(const Slice& key, const Slice& value) override;
   Status status() const override { return status_; }
   Status Finish() override;
+  Status AbortFinish(const std::exception& ex);
   void Abandon() override;
   uint64_t NumEntries() const override { return properties_.num_entries; }
   uint64_t FileSize() const override;
@@ -87,15 +91,22 @@ private:
     valvec<char> commonPrefix;
     Uint64Histogram key;
     Uint64Histogram value;
+    febitvec valueBits;
     bitfield_array<2> type;
     size_t split = 0;
     uint64_t indexFileBegin = 0;
     uint64_t indexFileEnd = 0;
     uint64_t valueFileBegin = 0;
     uint64_t valueFileEnd = 0;
+    uint64_t seqType = 0;
+    TempFileDeleteOnClose valueFile;
+    bool isValueBuild = false;
+    bool isUseDictZip = false;
+    std::future<Status> wait;
     valvec<std::unique_ptr<BuildIndexParams>> build;
   };
-  void AddPrevUserKey(bool finish = false);
+  void AddPrevUserKey();
+  void AddLastUserKey();
   void OfflineZipValueData();
   void UpdateValueLenHistogram();
   struct WaitHandle : boost::noncopyable {
@@ -110,34 +121,50 @@ private:
   WaitHandle WaitForMemory(const char* who, size_t memorySize);
   Status EmptyTableFinish();
   Status OfflineFinish();
+  std::future<Status> Async(std::function<Status()> func);
   void BuildIndex(BuildIndexParams& param, KeyValueStatus& kvs);
+  enum BuildStoreFlag {
+    BuildStoreInit = 1,
+    BuildStoreSync = 2,
+  };
+  Status BuildStore(KeyValueStatus& kvs, DictZipBlobStore::ZipBuilder* zbuilder, uint64_t flag);
   Status WaitBuildIndex();
+  Status WaitBuildStore();
   struct BuildReorderParams {
     AutoDeleteFile tmpReorderFile;
     bitfield_array<2> type;
   };
   void BuildReorderMap(BuildReorderParams& params,
-    KeyValueStatus& kvs,
-    fstring mmap_memory,
-    BlobStore* store,
-    long long& t6);
+                       KeyValueStatus& kvs,
+                       fstring mmap_memory,
+                       AbstractBlobStore* store,
+                       long long& t6);
   WaitHandle LoadSample(std::unique_ptr<DictZipBlobStore::ZipBuilder>& zbuilder);
+  struct BuildStoreParams {
+    KeyValueStatus& kvs;
+    WaitHandle handle;
+    fstring fpath;
+    size_t offset;
+  };
+  Status buildZeroLengthBlobStore(BuildStoreParams& params);
+  Status buildPlainBlobStore(BuildStoreParams& params);
+  Status buildMixedLenBlobStore(BuildStoreParams& params);
+  Status buildZipOffsetBlobStore(BuildStoreParams& params);
   Status ZipValueToFinish();
-  void DebugPrepare();
-  void DebugCleanup();
-  Status BuilderWriteValues(NativeDataInput<InputBuffer>& tmpValueFileinput
-    , KeyValueStatus& kvs, std::function<void(fstring val)> write);
+  Status ZipValueToFinishMulti();
+  Status BuilderWriteValues(KeyValueStatus& kvs, std::function<void(fstring val)> write);
   void DoWriteAppend(const void* data, size_t size);
-  Status WriteStore(fstring indexMmap, BlobStore* store
-    , KeyValueStatus& kvs
-    , BlockHandle& dataBlock
-    , long long& t5, long long& t6, long long& t7);
-  Status WriteSSTFile(long long t3, long long t4
-    , fstring tmpStoreFile
-    , fstring tmpDictFile
-    , const DictZipBlobStore::ZipStat& dzstat);
-  Status WriteMetaData(const TerarkZipMultiOffsetInfo& offsetInfo,
-                       std::initializer_list<std::pair<const std::string*, BlockHandle>> blocks);
+  Status WriteStore(fstring indexMmap, AbstractBlobStore* store,
+                    KeyValueStatus& kvs,
+                    BlockHandle& dataBlock,
+                    long long& t5, long long& t6, long long& t7);
+  Status WriteSSTFile(long long t3, long long t4,
+                      fstring tmpDictFile,
+                      const DictZipBlobStore::ZipStat& dzstat);
+  Status WriteSSTFileMulti(long long t3, long long t4,
+                           fstring tmpDictFile,
+                           const DictZipBlobStore::ZipStat& dzstat);
+  Status WriteMetaData(std::initializer_list<std::pair<const std::string*, BlockHandle>> blocks);
   DictZipBlobStore::ZipBuilder* createZipBuilder() const;
 
   Arena arena_;
@@ -145,19 +172,25 @@ private:
   const TerarkZipTableFactory* table_factory_;
   // fuck out TableBuilderOptions
   const ImmutableCFOptions& ioptions_;
+  TerarkZipMultiOffsetInfo offset_info_;
   std::vector<std::unique_ptr<IntTblPropCollector>> collectors_;
   // end fuck out TableBuilderOptions
   InternalIterator* second_pass_iter_ = nullptr;
-  size_t keydataSeed_ = 0;
-  valvec<KeyValueStatus> histogram_;
+  size_t nameSeed_ = 0;
+  size_t keyDataSize_ = 0;
+  size_t valueDataSize_ = 0;
+  valvec<std::unique_ptr<KeyValueStatus>> histogram_;
   TerarkIndex::KeyStat *currentStat_ = nullptr;
   valvec<byte_t> prevUserKey_;
-  terark::febitvec valueBits_;
-  size_t bitPosUnique_ = 0;
-  TempFileDeleteOnClose tmpValueFile_;
+  TempFileDeleteOnClose tmpSentryFile_;
   TempFileDeleteOnClose tmpSampleFile_;
   AutoDeleteFile tmpIndexFile_;
+  AutoDeleteFile tmpStoreFile_;
+  AutoDeleteFile tmpZipStoreFile_;
+  uint64_t tmpStoreFileSize_ = 0;
+  uint64_t tmpZipStoreFileSize_ = 0;
   std::mutex indexBuildMutex_;
+  std::mutex storeBuildMutex_;
   FileStream tmpDumpFile_;
   AutoDeleteFile tmpZipDictFile_;
   AutoDeleteFile tmpZipValueFile_;
@@ -176,7 +209,8 @@ private:
   TableProperties properties_;
   std::unique_ptr<DictZipBlobStore::ZipBuilder> zbuilder_;
   BlockBuilder range_del_block_;
-  terark::fstrvec valueBuf_; // collect multiple values for one key
+  fstrvec valueBuf_; // collect multiple values for one key
+  PipelineProcessor pipeline_;
   bool waitInited_ = false;
   bool closed_ = false;  // Either Finish() or Abandon() has been called.
   bool isReverseBytewiseOrder_;

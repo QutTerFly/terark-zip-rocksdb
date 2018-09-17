@@ -33,10 +33,26 @@ TerarkZipAutoConfigForOnlineDB(struct TerarkZipTableOptions&,
                                size_t memBytesLimit,
                                size_t diskBytesLimit);
 
+void
+__attribute__((weak))
+TerarkZipAutoConfigForOnlineDB_DBOptions(struct DBOptions& dbo, size_t cpuNum);
+
+void
+__attribute__((weak))
+TerarkZipAutoConfigForOnlineDB_CFOptions(struct TerarkZipTableOptions& tzo,
+                                    struct ColumnFamilyOptions& cfo,
+                                    size_t memBytesLimit,
+                                    size_t diskBytesLimit);
+
 class TableFactory*
 __attribute__((weak))
 NewTerarkZipTableFactory(const TerarkZipTableOptions&,
-                         class TableFactory* fallback);
+                         std::shared_ptr<class TableFactory> fallback);
+
+std::shared_ptr<class TableFactory>
+__attribute__((weak))
+SingleTerarkZipTableFactory(const TerarkZipTableOptions&,
+                            std::shared_ptr<class TableFactory> fallback);
 
 
 bool

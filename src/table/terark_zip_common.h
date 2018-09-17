@@ -14,6 +14,14 @@ namespace rocksdb {
   #define MY_THREAD_LOCAL(Type, Var)  static thread_local Type Var
 #endif
 
+#if defined(IOS_CROSS_COMPILE) || defined(__DARWIN_C_LEVEL)
+  #define MY_THREAD_STATIC_LOCAL(Type, Var)  static Type Var
+//#elif defined(_WIN32)
+//  #define MY_THREAD_LOCAL(Type, Var)  static __declspec(thread) Type Var
+#else
+  #define MY_THREAD_STATIC_LOCAL(Type, Var)  static thread_local Type Var
+#endif
+
 #define STD_INFO(format, ...) fprintf(stderr, "%s INFO: " format, StrDateTimeNow(), ##__VA_ARGS__)
 #define STD_WARN(format, ...) fprintf(stderr, "%s WARN: " format, StrDateTimeNow(), ##__VA_ARGS__)
 
@@ -22,10 +30,16 @@ namespace rocksdb {
 #if defined(NDEBUG) || 1
 # define INFO(logger, format, ...) Info(logger, format, ##__VA_ARGS__)
 # define WARN(logger, format, ...) Warn(logger, format, ##__VA_ARGS__)
+# define WARN_EXCEPT(logger, format, ...) \
+    WARN(logger, format, ##__VA_ARGS__); \
+    LogFlush(logger); \
+    STD_WARN(format, ##__VA_ARGS__)
 #else
 # define INFO(logger, format, ...) STD_INFO(format, ##__VA_ARGS__)
 # define WARN(logger, format, ...) STD_WARN(format, ##__VA_ARGS__)
+# define WARN_EXCEPT WARN
 #endif
+
 
 using std::string;
 using std::unique_ptr;
@@ -45,9 +59,69 @@ using terark::LittleEndianDataOutput;
 template<class T>
 inline unique_ptr<T> UniquePtrOf(T* p) { return unique_ptr<T>(p); }
 
-uint64_t ReadUint64(const byte_t* beg, const byte_t* end);
-uint64_t ReadUint64Aligned(const byte_t* beg, const byte_t* end);
-void AssignUint64(byte_t* beg, byte_t* end, uint64_t value);
+inline uint64_t ReadBigEndianUint64(const byte_t* beg, size_t len) {
+  union {
+    byte_t bytes[8];
+    uint64_t value;
+  } c;
+  c.value = 0;  // this is fix for gcc-4.8 union init bug
+  memcpy(c.bytes + (8 - len), beg, len);
+  return VALUE_OF_BYTE_SWAP_IF_LITTLE_ENDIAN(c.value);
+}
+inline uint64_t ReadBigEndianUint64(const byte_t* beg, const byte_t* end) {
+  assert(end - beg <= 8);
+  return ReadBigEndianUint64(beg, end-beg);
+}
+inline uint64_t ReadBigEndianUint64(fstring data) {
+  assert(data.size() <= 8);
+  return ReadBigEndianUint64((const byte_t*)data.data(), data.size());
+}
+
+inline
+uint64_t ReadBigEndianUint64Aligned(const byte_t* beg, size_t len) {
+  assert(8 == len); TERARK_UNUSED_VAR(len);
+  return VALUE_OF_BYTE_SWAP_IF_LITTLE_ENDIAN(*(const uint64_t*)beg);
+}
+inline
+uint64_t ReadBigEndianUint64Aligned(const byte_t* beg, const byte_t* end) {
+  assert(end - beg == 8); TERARK_UNUSED_VAR(end);
+  return VALUE_OF_BYTE_SWAP_IF_LITTLE_ENDIAN(*(const uint64_t*)beg);
+}
+inline uint64_t ReadBigEndianUint64Aligned(fstring data) {
+  assert(data.size() == 8);
+  return VALUE_OF_BYTE_SWAP_IF_LITTLE_ENDIAN(*(const uint64_t*)data.p);
+}
+
+inline void SaveAsBigEndianUint64(byte_t* beg, size_t len, uint64_t value) {
+  assert(len <= 8);
+  union {
+    byte_t bytes[8];
+    uint64_t value;
+  } c;
+  c.value = VALUE_OF_BYTE_SWAP_IF_LITTLE_ENDIAN(value);
+  memcpy(beg, c.bytes + (8 - len), len);
+}
+
+inline void SaveAsBigEndianUint64(byte_t* beg, byte_t* end, uint64_t value) {
+  assert(end - beg <= 8);
+  SaveAsBigEndianUint64(beg, end-beg, value);
+}
+
+template<class T>
+inline void correct_minmax(T& minVal, T& maxVal) {
+  if (maxVal < minVal) {
+    using namespace std;
+    swap(maxVal, minVal);
+  }
+}
+
+template<class T>
+T abs_diff(const T& x, const T& y) {
+  if (x < y)
+    return y - x;
+  else
+    return x - y;
+}
 
 const char* StrDateTimeNow();
 std::string demangle(const char* name);

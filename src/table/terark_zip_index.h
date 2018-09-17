@@ -8,6 +8,7 @@
 #include <terark/io/StreamBuffer.hpp>
 #include <terark/util/fstrvec.hpp>
 #include <boost/intrusive_ptr.hpp>
+#include <boost/noncopyable.hpp>
 #include <memory>
 
 namespace rocksdb {
@@ -22,7 +23,7 @@ using std::unique_ptr;
 
 struct TerarkZipTableOptions;
 class TempFileDeleteOnClose;
-
+struct ImmutableCFOptions;
 class TerarkIndex : boost::noncopyable {
 public:
   class Iterator : boost::noncopyable {
@@ -52,13 +53,16 @@ public:
   };
   class Factory : public terark::RefCounter {
   public:
+    size_t  mapIndex = size_t(-1);
     virtual ~Factory();
     virtual TerarkIndex* Build(NativeDataInput<InputBuffer>& tmpKeyFileReader,
                                const TerarkZipTableOptions& tzopt,
-                               const KeyStat&) const = 0;
+                               const KeyStat&,
+                               const ImmutableCFOptions* ioption = nullptr) const = 0;
     virtual unique_ptr<TerarkIndex> LoadMemory(fstring mem) const = 0;
     virtual unique_ptr<TerarkIndex> LoadFile(fstring fpath) const = 0;
     virtual size_t MemSizeForBuild(const KeyStat&) const = 0;
+    const char* WireName() const;
   };
   typedef boost::intrusive_ptr<Factory> FactoryPtr;
   struct AutoRegisterFactory {
@@ -67,12 +71,14 @@ public:
   };
   static const Factory* GetFactory(fstring name);
   static const Factory* SelectFactory(const KeyStat&, fstring name);
+  static bool SeekCostEffectiveIndexLen(const KeyStat& ks, size_t& ceLen);
   static unique_ptr<TerarkIndex> LoadFile(fstring fpath);
   static unique_ptr<TerarkIndex> LoadMemory(fstring mem);
   virtual ~TerarkIndex();
   virtual const char* Name() const = 0;
   virtual void SaveMmap(std::function<void(const void *, size_t)> write) const = 0;
   virtual size_t Find(fstring key) const = 0;
+  virtual size_t DictRank(fstring key) const = 0;
   virtual size_t NumKeys() const = 0;
   virtual size_t TotalKeySize() const = 0;
   virtual fstring Memory() const = 0;
@@ -82,14 +88,24 @@ public:
   virtual void BuildCache(double cacheRatio) = 0;
 };
 
-#define TerarkIndexRegister(clazz, ...)                         \
-	  BOOST_STATIC_ASSERT(sizeof(BOOST_STRINGIZE(clazz)) <= 60);  \
+#define TerarkIndexRegister(clazz, ...) \
+    TerarkIndexRegisterImp(clazz, #clazz, ##__VA_ARGS__)
+
+#define TerarkIndexRegisterNLT(clazzSuffix, ...)          \
+    TerarkIndexRegisterImp(TrieDAWG_##clazzSuffix,                      \
+        BOOST_STRINGIZE(BOOST_PP_CAT(NestLoudsTrieDAWG_, clazzSuffix)), \
+        BOOST_STRINGIZE(clazzSuffix), \
+        ##__VA_ARGS__)
+
+#define TerarkIndexRegisterImp(clazz, WireName, ...)            \
+	  BOOST_STATIC_ASSERT(sizeof(WireName) <= 60);                \
     TerarkIndex::AutoRegisterFactory                            \
+    terark_used_static_obj                                      \
     g_AutoRegister_##clazz(                                     \
-        {__VA_ARGS__,#clazz},                                   \
+        {WireName,__VA_ARGS__},                                 \
         typeid(clazz).name(),                                   \
         new clazz::MyFactory()                                  \
     )
 
 }
- 
+

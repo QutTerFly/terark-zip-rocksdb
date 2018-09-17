@@ -12,9 +12,14 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include <stdio.h>
 
 
+#define TerocksPrivateCode
+#if defined(TerocksPrivateCode)
+// this macro for remove private code ...
+#endif // TerocksPrivateCode
 
 namespace rocksdb {
 
@@ -52,11 +57,10 @@ struct TerarkZipTableOptions {
   /// unless you know what it really does for
   /// 0 : no debug
   /// 1 : enable infomation output
-  /// 2 : verify 2nd pass iter keys
-  /// 3 : verify 2nd pass iter keys & values
-  /// 4 : dump 1st & 2nd pass data to file
+  /// 2 : verify 2nd pass iter keys & values
+  /// 3 : dump 1st & 2nd pass data to file
   signed char   debugLevel               = 0;
-  bool          adviseRandomRead         = true;
+  bool          reserveBool              = false;
   unsigned char indexNestScale           = 8;
   bool          enableCompressionProbe   = true;
   bool          useSuffixArrayLocalMatch = false;
@@ -79,7 +83,7 @@ struct TerarkZipTableOptions {
   float          estimateCompressionRatio = 0.2f;
   double         sampleRatio              = 0.03;
   std::string    localTempDir             = "/tmp";
-  std::string    indexType                = "IL_256";
+  std::string    indexType                = "Mixed_XL_256_32_FL";
   std::string    extendedConfigFile;
 
   size_t softZipWorkingMemLimit = 16ull << 30;
@@ -87,7 +91,7 @@ struct TerarkZipTableOptions {
   size_t smallTaskMemory = 1200 << 20; // 1.2G
   // use dictZip for value when average value length >= minDictZipValueSize
   // otherwise do not use dictZip
-  size_t minDictZipValueSize = 30;
+  size_t minDictZipValueSize = 15;
   size_t keyPrefixLen = 0; // for IndexID
 
   // should be a small value, typically 0.001
@@ -122,6 +126,14 @@ void TerarkZipAutoConfigForOnlineDB(struct TerarkZipTableOptions&,
                          size_t cpuNum = 0,
                          size_t memBytesLimit = 0,
                          size_t diskBytesLimit = 0);
+void
+TerarkZipAutoConfigForOnlineDB_DBOptions(struct DBOptions& dbo, size_t cpuNum = 0);
+
+void
+TerarkZipAutoConfigForOnlineDB_CFOptions(struct TerarkZipTableOptions& tzo,
+                                    struct ColumnFamilyOptions& cfo,
+                                    size_t memBytesLimit = 0,
+                                    size_t diskBytesLimit = 0);
 
 bool TerarkZipConfigFromEnv(struct DBOptions&, struct ColumnFamilyOptions&);
 bool TerarkZipCFOptionsFromEnv(struct ColumnFamilyOptions&);
@@ -135,10 +147,15 @@ void
 TerarkZipMultiCFOptionsFromEnv(const struct DBOptions& db_options,
       const std::vector<struct ColumnFamilyDescriptor>& cfvec);
 
-///@param fallback take ownership of fallback
 class TableFactory*
 NewTerarkZipTableFactory(const TerarkZipTableOptions&,
-						 class TableFactory* fallback);
+                         std::shared_ptr<class TableFactory> fallback);
+
+std::shared_ptr<class TableFactory>
+SingleTerarkZipTableFactory(const TerarkZipTableOptions&,
+                            std::shared_ptr<class TableFactory> fallback);
+
+bool TerarkZipTablePrintCacheStat(const class TableFactory*, FILE*);
 
 bool TerarkZipTablePrintCacheStat(const class TableFactory*, FILE*);
 

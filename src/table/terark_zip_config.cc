@@ -8,6 +8,7 @@
 #ifdef _MSC_VER
 # include <Windows.h>
 # define strcasecmp _stricmp
+# define strncasecmp _strnicmp
 # undef DeleteFile
 #else
 # include <unistd.h>
@@ -46,22 +47,6 @@ void TerarkZipDeleteTempFiles(const std::string& tmpPath) {
   }
 }
 
-static
-int ComputeFileSizeMultiplier(double diskLimit, double minVal, int levels) {
-  if (diskLimit > 0) {
-    double maxSST = diskLimit / 6.0;
-    double maxMul = maxSST / minVal;
-    double oneMul = pow(maxMul, 1.0/(levels-1));
-    if (oneMul > 1.0)
-      return (int)oneMul;
-    else
-      return 1;
-  }
-  else {
-    return 5;
-  }
-}
-
 void TerarkZipAutoConfigForBulkLoad(struct TerarkZipTableOptions& tzo,
                                     struct DBOptions& dbo,
                                     struct ColumnFamilyOptions& cfo,
@@ -89,15 +74,16 @@ void TerarkZipAutoConfigForBulkLoad(struct TerarkZipTableOptions& tzo,
   tzo.softZipWorkingMemLimit = memBytesLimit * 7 / 8;
   tzo.hardZipWorkingMemLimit = tzo.softZipWorkingMemLimit;
   tzo.smallTaskMemory = memBytesLimit / 16;
-  tzo.indexNestLevel = 2;
+  tzo.indexNestLevel = 3;
 
+  cfo.table_factory = SingleTerarkZipTableFactory(tzo,
+      std::shared_ptr<TableFactory>(NewAdaptiveTableFactory()));
   cfo.write_buffer_size = tzo.smallTaskMemory;
-  cfo.num_levels = 5;
+  cfo.num_levels = 7;
   cfo.max_write_buffer_number = 6;
   cfo.min_write_buffer_number_to_merge = 1;
   cfo.target_file_size_base = cfo.write_buffer_size;
-  cfo.target_file_size_multiplier = ComputeFileSizeMultiplier(
-      diskBytesLimit, cfo.target_file_size_base, cfo.num_levels);
+  cfo.target_file_size_multiplier = cfo.write_buffer_size * 16;
   cfo.compaction_style = rocksdb::kCompactionStyleUniversal;
   cfo.compaction_options_universal.allow_trivial_move = true;
 
@@ -112,8 +98,11 @@ void TerarkZipAutoConfigForBulkLoad(struct TerarkZipTableOptions& tzo,
   dbo.create_if_missing = true;
   dbo.allow_concurrent_memtable_write = false;
   dbo.allow_mmap_reads = true;
+  dbo.allow_mmap_populate = false;
   dbo.max_background_flushes = 2;
   dbo.max_subcompactions = 1; // no sub compactions
+  dbo.new_table_reader_for_compaction_inputs = false;
+  dbo.max_open_files = -1;
 
   dbo.env->SetBackgroundThreads(max(1,min(4,iCpuNum/2)), rocksdb::Env::HIGH);
 }
@@ -125,11 +114,36 @@ void TerarkZipAutoConfigForOnlineDB(struct TerarkZipTableOptions& tzo,
                                     size_t memBytesLimit,
                                     size_t diskBytesLimit)
 {
+  TerarkZipAutoConfigForOnlineDB_CFOptions(tzo, cfo, memBytesLimit, diskBytesLimit);
+  TerarkZipAutoConfigForOnlineDB_DBOptions(dbo, cpuNum);
+}
+
+void
+TerarkZipAutoConfigForOnlineDB_DBOptions(struct DBOptions& dbo, size_t cpuNum)
+{
   using namespace std; // max, min
   int iCpuNum = int(cpuNum);
   if (cpuNum > 0) {
     terark::DictZipBlobStore_setZipThreads((iCpuNum * 3 + 1) / 5);
   }
+  dbo.create_if_missing = true;
+  dbo.allow_mmap_reads = true;
+  dbo.allow_mmap_populate = true;
+  dbo.max_background_flushes = 2;
+  dbo.max_subcompactions = 1; // no sub compactions
+  dbo.base_background_compactions = 3;
+  dbo.max_background_compactions = 5;
+
+  dbo.env->SetBackgroundThreads(max(1,min(3,iCpuNum*3/8)), rocksdb::Env::LOW);
+  dbo.env->SetBackgroundThreads(max(1,min(2,iCpuNum*2/8)), rocksdb::Env::HIGH);
+}
+
+void TerarkZipAutoConfigForOnlineDB_CFOptions(struct TerarkZipTableOptions& tzo,
+                                    struct ColumnFamilyOptions& cfo,
+                                    size_t memBytesLimit,
+                                    size_t diskBytesLimit)
+{
+  using namespace std; // max, min
   if (0 == memBytesLimit) {
 #ifdef _MSC_VER
     MEMORYSTATUSEX statex;
@@ -146,27 +160,17 @@ void TerarkZipAutoConfigForOnlineDB(struct TerarkZipTableOptions& tzo,
   tzo.hardZipWorkingMemLimit = tzo.softZipWorkingMemLimit * 2;
   tzo.smallTaskMemory = memBytesLimit / 64;
 
-  cfo.write_buffer_size = tzo.smallTaskMemory;
-  cfo.num_levels = 5;
-  cfo.max_write_buffer_number = 5;
-  cfo.target_file_size_base = cfo.write_buffer_size;
-  cfo.target_file_size_multiplier = ComputeFileSizeMultiplier(
-      diskBytesLimit, cfo.target_file_size_base, cfo.num_levels);
+  cfo.write_buffer_size = memBytesLimit / 32;
+  cfo.num_levels = 7;
+  cfo.max_write_buffer_number = 3;
+  cfo.target_file_size_base = memBytesLimit / 8;
+  cfo.target_file_size_multiplier = 1;
   cfo.compaction_style = rocksdb::kCompactionStyleUniversal;
   cfo.compaction_options_universal.allow_trivial_move = true;
 
-  cfo.max_bytes_for_level_base = cfo.write_buffer_size * 4;
-  cfo.max_bytes_for_level_multiplier = cfo.target_file_size_multiplier;
-
-  dbo.create_if_missing = true;
-  dbo.allow_mmap_reads = true;
-  dbo.max_background_flushes = 2;
-  dbo.max_subcompactions = 1; // no sub compactions
-  dbo.base_background_compactions = 3;
-  dbo.max_background_compactions = 5;
-
-  dbo.env->SetBackgroundThreads(max(1,min(3,iCpuNum*3/8)), rocksdb::Env::LOW);
-  dbo.env->SetBackgroundThreads(max(1,min(2,iCpuNum*2/8)), rocksdb::Env::HIGH);
+  // intended: less than target_file_size_base
+  cfo.max_bytes_for_level_base = cfo.write_buffer_size * 8;
+  cfo.max_bytes_for_level_multiplier = 2;
 }
 
 bool TerarkZipConfigFromEnv(DBOptions& dbo, ColumnFamilyOptions& cfo) {
@@ -189,6 +193,7 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
         "If env TerarkZipTable_localTempDir is defined, it must not be empty");
   }
   struct TerarkZipTableOptions tzo;
+  TerarkZipAutoConfigForOnlineDB_CFOptions(tzo, cfo, 0, 0);
   tzo.localTempDir = localTempDir;
   if (const char* algo = getenv("TerarkZipTable_entropyAlgo")) {
     if (strcasecmp(algo, "NoEntropy") == 0) {
@@ -225,16 +230,18 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   if (const char* env = getenv("TerarkZipTable_" #name))\
     obj.name = terark::ParseSizeXiB(env)
 
+#define MyOverrideInt(obj, name) MyGetInt(obj, name, obj.name)
+
   MyGetInt   (tzo, checksumLevel           , 3    );
   MyGetInt   (tzo, indexNestLevel          , 3    );
   MyGetInt   (tzo, terarkZipMinLevel       , 0    );
   MyGetInt   (tzo, debugLevel              , 0    );
   MyGetInt   (tzo, keyPrefixLen            , 0    );
-  MyGetInt   (tzo, offsetArrayBlockUnits   , 0    );
+  MyGetInt   (tzo, offsetArrayBlockUnits   , 128  );
   MyGetInt   (tzo, indexNestScale          , 8    );
   if (true
-      && 0   != tzo.offsetArrayBlockUnits
-      && 64  != tzo.offsetArrayBlockUnits
+      &&   0 != tzo.offsetArrayBlockUnits
+      &&  64 != tzo.offsetArrayBlockUnits
       && 128 != tzo.offsetArrayBlockUnits
   ){
     STD_WARN(
@@ -243,13 +250,12 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
     );
     tzo.offsetArrayBlockUnits = 128;
   }
-  if (tzo.indexNestScale == 0
-  ){
+  if (tzo.indexNestScale == 0){
     STD_WARN(
       "TerarkZipConfigFromEnv: bad indexNestScale = %d, must be in [1,255], reset to 8\n"
       , int(tzo.indexNestScale)
     );
-    tzo.offsetArrayBlockUnits = 8;
+    tzo.indexNestScale = 8;
   }
 
   MyGetBool  (tzo, useSuffixArrayLocalMatch, false);
@@ -257,10 +263,9 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetBool  (tzo, warmUpValueOnOpen       , false);
   MyGetBool  (tzo, disableSecondPassIter   , false);
   MyGetBool  (tzo, enableCompressionProbe  , true );
-  MyGetBool  (tzo, adviseRandomRead        , true );
 
   MyGetDouble(tzo, estimateCompressionRatio, 0.20 );
-  MyGetDouble(tzo, sampleRatio             , 0.03 );
+  MyGetDouble(tzo, sampleRatio             , 0.06 );
   MyGetDouble(tzo, indexCacheRatio         , 0.00 );
 
   MyGetInt(tzo, minPreadLen, -1);
@@ -268,11 +273,15 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetXiB(tzo, softZipWorkingMemLimit);
   MyGetXiB(tzo, hardZipWorkingMemLimit);
   MyGetXiB(tzo, smallTaskMemory);
+  MyGetXiB(tzo, singleIndexMemLimit);
   MyGetXiB(tzo, cacheCapacityBytes);
-  MyGetInt(tzo, cacheShards, 17);
+  MyGetInt(tzo, cacheShards, 67);
+  MyGetInt(tzo, minDictZipValueSize, 15);
 
+  tzo.singleIndexMemLimit = std::min<size_t>(tzo.singleIndexMemLimit, 0x1E0000000);
 
-  cfo.table_factory.reset(NewTerarkZipTableFactory(tzo, NewAdaptiveTableFactory()));
+  cfo.table_factory = SingleTerarkZipTableFactory(tzo,
+    std::shared_ptr<TableFactory>(NewAdaptiveTableFactory()));
   const char* compaction_style = "Universal";
   if (const char* env = getenv("TerarkZipTable_compaction_style")) {
     compaction_style = env;
@@ -290,18 +299,38 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
 #define MyGetUniversal_uint(name, Default) \
     cfo.compaction_options_universal.name = \
         terark::getEnvLong("TerarkZipTable_" #name, Default)
-    MyGetUniversal_uint(min_merge_width,  5);
-    MyGetUniversal_uint(max_merge_width, 50);
+    MyGetUniversal_uint(min_merge_width, 3);
+    MyGetUniversal_uint(max_merge_width, 7);
+    cfo.compaction_options_universal.size_ratio = (unsigned)
+        terark::getEnvLong("TerarkZipTable_universal_compaction_size_ratio",
+                            cfo.compaction_options_universal.size_ratio);
+    const char* env_stop_style =
+        getenv("TerarkZipTable_universal_compaction_stop_style");
+    if (env_stop_style) {
+      auto& ou = cfo.compaction_options_universal;
+      if (strncasecmp(env_stop_style, "Similar", 7) == 0) {
+        ou.stop_style = kCompactionStopStyleSimilarSize;
+      }
+      else if (strncasecmp(env_stop_style, "Total", 5) == 0) {
+        ou.stop_style = kCompactionStopStyleTotalSize;
+      }
+      else {
+        STD_WARN(
+          "bad env TerarkZipTable_universal_compaction_stop_style=%s, use rocksdb default 'TotalSize'",
+          env_stop_style);
+        ou.stop_style = kCompactionStopStyleTotalSize;
+      }
+    }
   }
-  cfo.write_buffer_size     = uint64_t(1) << 30; // 1G
-  cfo.target_file_size_base = uint64_t(1) << 30; // 1G
   MyGetXiB(cfo, write_buffer_size);
   MyGetXiB(cfo, target_file_size_base);
-  MyGetInt(cfo, max_write_buffer_number    , 5);
-  MyGetInt(cfo, target_file_size_multiplier, 5);
-  MyGetInt(cfo, num_levels                 , 5);
-  MyGetInt(cfo, level0_file_num_compaction_trigger,
-           cfo. level0_file_num_compaction_trigger);
+  MyGetBool(cfo, enable_partial_remove, false);
+  MyOverrideInt(cfo, max_write_buffer_number);
+  MyOverrideInt(cfo, target_file_size_multiplier);
+  MyOverrideInt(cfo, num_levels                 );
+  MyOverrideInt(cfo, level0_file_num_compaction_trigger);
+  MyOverrideInt(cfo, level0_slowdown_writes_trigger);
+  MyOverrideInt(cfo, level0_stop_writes_trigger);
 
   if (tzo.debugLevel) {
     STD_INFO("TerarkZipConfigFromEnv(dbo, cfo) successed\n");
@@ -310,35 +339,38 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
 }
 
 void TerarkZipDBOptionsFromEnv(DBOptions& dbo) {
+  TerarkZipAutoConfigForOnlineDB_DBOptions(dbo, 0);
+
   MyGetInt(dbo, base_background_compactions, 3);
   MyGetInt(dbo,  max_background_compactions, 5);
   MyGetInt(dbo,  max_background_flushes    , 3);
   MyGetInt(dbo,  max_subcompactions        , 1);
+  MyGetBool(dbo, allow_mmap_populate       , false);
 
   dbo.env->SetBackgroundThreads(dbo.max_background_compactions, rocksdb::Env::LOW);
   dbo.env->SetBackgroundThreads(dbo.max_background_flushes    , rocksdb::Env::HIGH);
   dbo.allow_mmap_reads = true;
+  dbo.new_table_reader_for_compaction_inputs = false;
+  dbo.max_open_files = -1;
 }
 
-bool TerarkZipIsBlackListCF(const std::string& cfname) {
-  static std::mutex  mtx;
-  static size_t  isInitialized = false;
-  static terark::hash_strmap<>  blackList;
-  if (!isInitialized) {
-    std::lock_guard<std::mutex> lock(mtx);
-    if (!isInitialized) {
-      if (const char* env = getenv("TerarkZipTable_blackListColumnFamily")) {
-          const char* end = env + strlen(env);
-          for (auto  curr = env; curr < end; ) {
-            auto next = std::find(curr, end, ',');
-            blackList.insert_i(fstring(curr, next));
-            curr = next + 1;
-          }
+class TerarkBlackListCF : public terark::hash_strmap<> {
+public:
+  TerarkBlackListCF() {
+    if (const char* env = getenv("TerarkZipTable_blackListColumnFamily")) {
+      const char* end = env + strlen(env);
+      for (auto  curr = env; curr < end; ) {
+        auto next = std::find(curr, end, ',');
+        this->insert_i(fstring(curr, next));
+        curr = next + 1;
       }
-      isInitialized = true;
     }
   }
-  return blackList.exists(cfname);
+};
+static TerarkBlackListCF g_blacklistCF;
+
+bool TerarkZipIsBlackListCF(const std::string& cfname) {
+  return g_blacklistCF.exists(cfname);
 }
 
 template<class T>

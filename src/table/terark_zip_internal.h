@@ -7,9 +7,6 @@
 
 #pragma once
 
-#ifndef TERARK_ZIP_INTERNAL_H_
-#define TERARK_ZIP_INTERNAL_H_
-
 // project headers
 #include "terark_zip_table.h"
 // std headers
@@ -17,6 +14,7 @@
 #include <atomic>
 // boost headers
 #include <boost/intrusive_ptr.hpp>
+#include <boost/noncopyable.hpp>
 // rocksdb headers
 #include <rocksdb/slice.h>
 #include <rocksdb/env.h>
@@ -32,7 +30,22 @@
 //#define DEBUG_TWO_PASS_ITER
 
 
+#if defined(TerocksPrivateCode)
+//# define USE_CRYPTOPP
+//# define USE_OPENSSL
+#endif // TerocksPrivateCode
 
+#if ROCKSDB_MAJOR * 1000 + ROCKSDB_MINOR >= 5008
+  #define TERARK_ROCKSDB_5008(...) __VA_ARGS__
+#else
+  #define TERARK_ROCKSDB_5008(...)
+#endif
+
+#if ROCKSDB_MAJOR * 1000 + ROCKSDB_MINOR >= 5007
+  #define TERARK_ROCKSDB_5007(...) __VA_ARGS__
+#else
+  #define TERARK_ROCKSDB_5007(...)
+#endif
 
 void PrintVersion(rocksdb::Logger* info_log);
 
@@ -54,7 +67,9 @@ extern const std::string kTerarkZipTableValueDictBlock;
 extern const std::string kTerarkZipTableOffsetBlock;
 extern const std::string kTerarkZipTableCommonPrefixBlock;
 extern const std::string kTerarkEmptyTableKey;
-
+#if defined(TerocksPrivateCode)
+extern const std::string kTerarkZipTableExtendedBlock;
+#endif // TerocksPrivateCode
 extern const std::string kTerarkZipTableBuildTimestamp;
 
 template<class ByteArray>
@@ -73,6 +88,53 @@ inline ByteArrayView SubStr(const ByteArrayView& x, size_t pos) {
   return ByteArrayView(x.data() + pos, x.size() - pos);
 }
 
+#if defined(TerocksPrivateCode)
+
+struct LicenseInfo {
+  struct Head {
+    char meta[4] = {'E', 'X', 'T', '.'};
+    uint32_t size = sizeof(Head);
+    uint64_t sign;
+  } head;
+  struct SubHead {
+    char name[4];
+    uint16_t version;
+    uint16_t size;
+  };
+  struct KeyInfo {
+    SubHead head = {{ 'k', 'e', 'y', '_' }, 1, sizeof(KeyInfo)};
+    uint64_t sign;
+    uint64_t id_hash;
+    uint64_t date;
+    uint64_t duration;
+  } *key = nullptr, key_storage;
+  struct SstInfo {
+    SubHead head = {{ 's', 's', 't', '_' }, 1, sizeof(SstInfo)};
+    uint64_t sign;
+    uint64_t create_date;
+  } *sst = nullptr, sst_storage;
+
+  mutable std::mutex mutex;
+
+  enum Result : uint32_t {
+    OK,
+    BadStream,
+    BadHead,
+    BadSign,
+    BadVersion,
+    BadLicense,
+    InternalError,
+  };
+
+  LicenseInfo();
+  Result load_nolock(const std::string& license_file);
+  Result merge(const void* data, size_t size);
+  valvec<byte_t> dump() const;
+  bool check() const;
+  void print_error(const char* file_name, bool startup, rocksdb::Logger* logger) const;
+};
+
+#endif // TerocksPrivateCode
 
 struct CollectInfo {
   static const size_t queue_size;
@@ -112,7 +174,7 @@ enum class ZipValueType : unsigned char {
 //const size_t kZipValueTypeBits = 2;
 
 struct ZipValueMultiValue {
-  // TODO: use offset[0] as num, and do not store offsets[num]
+  // use offset[0] as num, and do not store offsets[num]
   // when unzip, reserve num+1 cells, set offsets[0] to 0,
   // and set offsets[num] to length of value pack
   //	uint32_t num;
@@ -175,7 +237,8 @@ struct TerarkZipMultiOffsetInfo {
 class TerarkZipTableFactory : public TableFactory, boost::noncopyable {
 public:
   explicit
-  TerarkZipTableFactory(const TerarkZipTableOptions& tzto, TableFactory* fallback);
+  TerarkZipTableFactory(const TerarkZipTableOptions& tzto,
+      std::shared_ptr<class TableFactory> fallback);
   ~TerarkZipTableFactory();
 
   const char* Name() const override { return "TerarkZipTable"; }
@@ -204,16 +267,27 @@ public:
 
   LruReadonlyCache* cache() const { return cache_.get(); }
 
+  Status GetOptionString(std::string* opt_string, const std::string& delimiter)
+  const TERARK_ROCKSDB_5008(override);
+
 private:
   TerarkZipTableOptions table_options_;
-  TableFactory* fallback_factory_;
+  std::shared_ptr<class TableFactory> fallback_factory_;
   TableFactory* adaptive_factory_; // just for open table
   boost::intrusive_ptr<LruReadonlyCache> cache_;
   mutable size_t nth_new_terark_table_ = 0;
   mutable size_t nth_new_fallback_table_ = 0;
 private:
+#if defined(TerocksPrivateCode)
+  mutable LicenseInfo license_;
+#endif // TerocksPrivateCode
   mutable CollectInfo collect_;
 public:
+#if defined(TerocksPrivateCode)
+  LicenseInfo& GetLicense() const {
+    return license_;
+  }
+#endif // TerocksPrivateCode
   CollectInfo& GetCollect() const {
     return collect_;
   }
@@ -221,5 +295,3 @@ public:
 
 
 }  // namespace rocksdb
-
-#endif /* TERARK_ZIP_INTERNAL_H_ */
