@@ -12,10 +12,10 @@ Set single SST file larger will get better compression, to tune SST file file si
 see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide)
 
 ## License
-This software is open source, you can read the source code,
-but you can not compile this software by yourself,
-you must get [our](http://terark.com) comercial license to use this software in production.
-<BR>[About us](http://terark.com)
+This software is open source with Apache 2.0 LICENSE, with NOTES:
+  * You can read or redistribute or use the source code under Apache 2.0 license
+  * You can not compile this software by yourself, since this software depends on our proprietary core algorithms, which requires a commercial license
+  * You can [download](https://github.com/Terark/terarkdb) the precompiled binary library of this software
 
 ## Downloads precompiled library
   bmi2-0 means this software can run on older CPU(but the CPU must support popcnt)
