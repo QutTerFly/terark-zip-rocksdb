@@ -159,7 +159,6 @@ static void MmapAdviseRandom(fstring mem) {
   MmapAdviseRandom(mem.data(), mem.size());
 }
 
-#if defined(TerocksPrivateCode)
 Status UpdateLicenseInfo(const TerarkZipTableFactory* table_factory,
                          Logger* info_log,
                          const BlockContents& licenseBlock) {
@@ -173,7 +172,6 @@ Status UpdateLicenseInfo(const TerarkZipTableFactory* table_factory,
   }
   return Status::OK();
 }
-#endif // TerocksPrivateCode
 
 void UpdateCollectInfo(const TerarkZipTableFactory* table_factory,
                        const TerarkZipTableOptions* tzopt,
@@ -1008,7 +1006,6 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
   }
   file_data_ = file_data;
   global_seqno_ = GetGlobalSequenceNumber(*props, ioptions.info_log);
-#if defined(TerocksPrivateCode)
   BlockContents licenseBlock;
   s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableExtendedBlock, &licenseBlock);
@@ -1018,7 +1015,6 @@ TerarkEmptyTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
       return s;
     }
   }
-#endif // TerocksPrivateCode
   s = LoadTombstone(file, file_size);
   if (global_seqno_ == kDisableGlobalSequenceNumber) {
     global_seqno_ = 0;
@@ -1075,7 +1071,6 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
     fstring(ioptions.user_comparator->Name()) == "rocksdb.Uint64Comparator";
 #endif
   BlockContents valueDictBlock, indexBlock, zValueTypeBlock, commonPrefixBlock;
-#if defined(TerocksPrivateCode)
   BlockContents licenseBlock;
   s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableExtendedBlock, &licenseBlock);
@@ -1085,7 +1080,6 @@ TerarkZipTableReader::Open(RandomAccessFileReader* file, uint64_t file_size) {
       return s;
     }
   }
-#endif // TerocksPrivateCode
   UpdateCollectInfo(table_factory_, &tzto_, props, file_size);
   s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableValueDictBlock, &valueDictBlock);
@@ -1266,14 +1260,12 @@ uint64_t TerarkZipTableReader::ApproximateOffsetOf_old(const Slice& ikey) {
 }
 
 uint64_t TerarkZipTableReader::ApproximateOffsetOf_new(const Slice& ikey) {
-#if defined(TerocksPrivateCode)
   size_t numRecords = subReader_.index_->NumKeys();
   size_t rank = subReader_.DictRank(fstringOf(ExtractUserKey(ikey)));
   auto offset = uint64_t(subReader_.rawReaderSize_ * 1.0 * rank / numRecords);
   if (isReverseBytewiseOrder_)
     return subReader_.rawReaderSize_ - offset;
   return offset;
-#endif // TerocksPrivateCode
   return 0;
 }
 
@@ -1686,7 +1678,6 @@ TerarkZipTableMultiReader::Open(RandomAccessFileReader* file, uint64_t file_size
 #endif
   BlockContents valueDictBlock, indexBlock, zValueTypeBlock, commonPrefixBlock;
   BlockContents offsetBlock;
-#if defined(TerocksPrivateCode)
   BlockContents licenseBlock;
   s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableExtendedBlock, &licenseBlock);
@@ -1696,7 +1687,6 @@ TerarkZipTableMultiReader::Open(RandomAccessFileReader* file, uint64_t file_size
       return s;
     }
   }
-#endif // TerocksPrivateCode
   UpdateCollectInfo(table_factory_, &tzto_, props, file_size);
   s = ReadMetaBlockAdapte(file, file_size, kTerarkZipTableMagicNumber, ioptions,
     kTerarkZipTableOffsetBlock, &offsetBlock);

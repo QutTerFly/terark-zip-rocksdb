@@ -15,7 +15,6 @@
 
 namespace rocksdb {
 
-
 const char* StrDateTimeNow() {
   static thread_local char buf[64];
   time_t rawtime;

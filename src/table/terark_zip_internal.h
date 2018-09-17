@@ -30,10 +30,8 @@
 //#define DEBUG_TWO_PASS_ITER
 
 
-#if defined(TerocksPrivateCode)
 //# define USE_CRYPTOPP
 //# define USE_OPENSSL
-#endif // TerocksPrivateCode
 
 #if ROCKSDB_MAJOR * 1000 + ROCKSDB_MINOR >= 5008
   #define TERARK_ROCKSDB_5008(...) __VA_ARGS__
@@ -67,9 +65,7 @@ extern const std::string kTerarkZipTableValueDictBlock;
 extern const std::string kTerarkZipTableOffsetBlock;
 extern const std::string kTerarkZipTableCommonPrefixBlock;
 extern const std::string kTerarkEmptyTableKey;
-#if defined(TerocksPrivateCode)
 extern const std::string kTerarkZipTableExtendedBlock;
-#endif // TerocksPrivateCode
 extern const std::string kTerarkZipTableBuildTimestamp;
 
 template<class ByteArray>
@@ -88,7 +84,6 @@ inline ByteArrayView SubStr(const ByteArrayView& x, size_t pos) {
   return ByteArrayView(x.data() + pos, x.size() - pos);
 }
 
-#if defined(TerocksPrivateCode)
 
 struct LicenseInfo {
   struct Head {
@@ -134,7 +129,6 @@ struct LicenseInfo {
   void print_error(const char* file_name, bool startup, rocksdb::Logger* logger) const;
 };
 
-#endif // TerocksPrivateCode
 
 struct CollectInfo {
   static const size_t queue_size;
@@ -278,16 +272,12 @@ private:
   mutable size_t nth_new_terark_table_ = 0;
   mutable size_t nth_new_fallback_table_ = 0;
 private:
-#if defined(TerocksPrivateCode)
   mutable LicenseInfo license_;
-#endif // TerocksPrivateCode
   mutable CollectInfo collect_;
 public:
-#if defined(TerocksPrivateCode)
   LicenseInfo& GetLicense() const {
     return license_;
   }
-#endif // TerocksPrivateCode
   CollectInfo& GetCollect() const {
     return collect_;
   }

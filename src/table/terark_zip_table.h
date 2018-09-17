@@ -16,10 +16,7 @@
 #include <stdio.h>
 
 
-#define TerocksPrivateCode
-#if defined(TerocksPrivateCode)
 // this macro for remove private code ...
-#endif // TerocksPrivateCode
 
 namespace rocksdb {
 
@@ -154,8 +151,6 @@ NewTerarkZipTableFactory(const TerarkZipTableOptions&,
 std::shared_ptr<class TableFactory>
 SingleTerarkZipTableFactory(const TerarkZipTableOptions&,
                             std::shared_ptr<class TableFactory> fallback);
-
-bool TerarkZipTablePrintCacheStat(const class TableFactory*, FILE*);
 
 bool TerarkZipTablePrintCacheStat(const class TableFactory*, FILE*);
 

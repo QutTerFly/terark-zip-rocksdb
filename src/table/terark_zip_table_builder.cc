@@ -282,9 +282,7 @@ TerarkZipTableBuilder::~TerarkZipTableBuilder() {
 uint64_t TerarkZipTableBuilder::FileSize() const {
   if (0 == offset_) {
     // for compaction caller to split file by increasing size
-#if defined(TerocksPrivateCode)
     return estimateOffset_;
-#endif // TerocksPrivateCode
     size_t nltTrieMemSize = 0;
     for (auto& item : histogram_) {
       for (auto& ptr : item->build) {
@@ -366,7 +364,6 @@ try {
       userKey = userKey.substr(key_prefixLen_);
       if (prevUserKey_ != userKey) {
         assert((prevUserKey_ < userKey) ^ isReverseBytewiseOrder_);
-#if defined(TerocksPrivateCode)
         size_t indexSize = UintVecMin0::compute_mem_size_by_max_val(
           currentStat_->sumKeyLen, currentStat_->numKeys);
         size_t nltTrieMemSize = currentStat_->sumKeyLen + indexSize;
@@ -378,7 +375,6 @@ try {
           currentStat_->minKey.assign(userKey);
         }
         else
-#endif // TerocksPrivateCode
         {
           AddPrevUserKey();
         }
@@ -574,14 +570,12 @@ Status TerarkZipTableBuilder::EmptyTableFinish() {
   if (!s.ok()) {
     return s;
   }
-#if defined(TerocksPrivateCode)
   auto& license = table_factory_->GetLicense();
   BlockHandle licenseHandle;
   s = WriteBlock(SliceOf(license.dump()), file_, &offset_, &licenseHandle);
   if (!s.ok()) {
     return s;
   }
-#endif // TerocksPrivateCode
   if (!range_del_block_.empty()) {
     s = WriteBlock(range_del_block_.Finish(), file_, &offset_, &tombstoneBH);
     if (!s.ok()) {
@@ -591,9 +585,7 @@ Status TerarkZipTableBuilder::EmptyTableFinish() {
   range_del_block_.Reset();
   offset_info_.Init(0, 0);
   return WriteMetaData({
-#if defined(TerocksPrivateCode)
     { &kTerarkZipTableExtendedBlock                 , licenseHandle },
-#endif // TerocksPrivateCode
     { &kTerarkEmptyTableKey                         , emptyTableBH  },
     { !tombstoneBH.IsNull() ? &kRangeDelBlock : NULL, tombstoneBH   },
   });
@@ -646,12 +638,10 @@ std::future<Status> TerarkZipTableBuilder::Async(std::function<Status()> func) {
 
 void TerarkZipTableBuilder::BuildIndex(BuildIndexParams& param, KeyValueStatus& kvs) {
   assert(param.stat.numKeys > 0);
-#if defined(TerocksPrivateCode)
   if (kvs.split == 0) {
     param.stat.commonPrefixLen = commonPrefixLen(param.stat.minKey, param.stat.maxKey);
   }
   else if (0)
-#endif // TerocksPrivateCode
   {
     // nlt don't support only one key which is empty ...
     if (kvs.split == 0 && param.stat.numKeys > 1) {
@@ -662,12 +652,10 @@ void TerarkZipTableBuilder::BuildIndex(BuildIndexParams& param, KeyValueStatus& 
   param.wait = Async([this, &param, &kvs]() {
     auto& keyStat = param.stat;
     const TerarkIndex::Factory* factory;
-#if defined(TerocksPrivateCode)
     if (kvs.split != 0) {
       factory = TerarkIndex::GetFactory(table_options_.indexType);
     }
     else
-#endif // TerocksPrivateCode
     {
       factory = TerarkIndex::SelectFactory(keyStat, table_options_.indexType);
     }
@@ -1616,14 +1604,12 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
       return s;
     }
   }
-#if defined(TerocksPrivateCode)
   auto& license = table_factory_->GetLicense();
   BlockHandle licenseHandle;
   s = WriteBlock(SliceOf(license.dump()), file_, &offset_, &licenseHandle);
   if (!s.ok()) {
     return s;
   }
-#endif // TerocksPrivateCode
   if (!range_del_block_.empty()) {
     s = WriteBlock(range_del_block_.Finish(), file_, &offset_, &tombstoneBlock);
     if (!s.ok()) {
@@ -1649,9 +1635,7 @@ Status TerarkZipTableBuilder::WriteSSTFile(long long t3, long long t4
                    zvTypeBlock.size(),
                    commonPrefixBlock.size());
   WriteMetaData({
-#if defined(TerocksPrivateCode)
     { &kTerarkZipTableExtendedBlock                                , licenseHandle     },
-#endif // TerocksPrivateCode
     { dict.memory.size() ? &kTerarkZipTableValueDictBlock : NULL   , dictBlock         },
     { &kTerarkZipTableIndexBlock                                   , indexBlock        },
     { !zvTypeBlock.IsNull() ? &kTerarkZipTableValueTypeBlock : NULL, zvTypeBlock       },
@@ -1884,14 +1868,12 @@ Status TerarkZipTableBuilder::WriteSSTFileMulti(long long t3, long long t4
   if (!s.ok()) {
     return s;
   }
-#if defined(TerocksPrivateCode)
   auto& license = table_factory_->GetLicense();
   BlockHandle licenseHandle;
   s = WriteBlock(SliceOf(license.dump()), file_, &offset_, &licenseHandle);
   if (!s.ok()) {
       return s;
   }
-#endif // TerocksPrivateCode
   if (!range_del_block_.empty()) {
     s = WriteBlock(range_del_block_.Finish(), file_, &offset_, &tombstoneBlock);
     if (!s.ok()) {
@@ -1910,9 +1892,7 @@ Status TerarkZipTableBuilder::WriteSSTFileMulti(long long t3, long long t4
   properties_.index_size = indexBlock.size();
   properties_.num_data_blocks = numKeys;
   WriteMetaData({
-#if defined(TerocksPrivateCode)
     {&kTerarkZipTableExtendedBlock                                , licenseHandle     },
-#endif // TerocksPrivateCode
     {!dict.memory.empty() ? &kTerarkZipTableValueDictBlock : NULL , dictBlock         },
     {&kTerarkZipTableIndexBlock                                   , indexBlock        },
     {!zvTypeBlock.IsNull() ? &kTerarkZipTableValueTypeBlock : NULL, zvTypeBlock       },

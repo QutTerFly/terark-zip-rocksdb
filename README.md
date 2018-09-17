@@ -128,14 +128,16 @@ LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
   /// larger MemTable yield larger level0 SST file
   /// larger SST file make terark-zip better
   options.write_buffer_size     =  1ull << 30; // 1G
-  options.target_file_size_base =  1ull << 30; // 1G
+  options.target_file_size_base =  8ull << 30; // 8G
 
-`terark-zip-rocksdb` implements an `SSTable` for [TerarkDB's submodule rocksdb](https://github.com/Terark/rocksdb), [terark-zip-rocksdb license](https://github.com/Terark/terark-zip-rocksdb/blob/master/LICENSE) is Apache 2.0, with NOTES:
-  * You can read or redistribute or use the source code under Apache 2.0 license
-  * You can not compile this software by yourself, since this software depends on our proprietary core algorithms, which requires a commercial license
-  * You can [download](https://github.com/Terark/terarkdb) the precompiled binary library of this software
+  /// turn off rocksdb write slowdown, optional. If write slowdown is enabled
+  /// and write was really slow down, you may doubt that terark-zip caused it
+  options.level0_slowdown_writes_trigger = INT_MAX;
+  options.level0_stop_writes_trigger = INT_MAX;
+  options.soft_pending_compaction_bytes_limit = 0;
+  options.hard_pending_compaction_bytes_limit = 0;
+```
 
 ## Contact
 - contact@terark.com
 - [terark.com](http://terark.com)
-
