@@ -36,6 +36,12 @@
     <ClCompile Include="..\src\table\terark_zip_table_reader.cc">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\table\terark_zip_memtable.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\table\terark_zip_entry_index.cc">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\table\terark_zip_common.h">

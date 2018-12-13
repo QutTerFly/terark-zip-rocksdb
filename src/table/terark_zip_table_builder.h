@@ -85,6 +85,7 @@ private:
     std::future<Status> wait;
     uint64_t indexFileBegin = 0;
     uint64_t indexFileEnd = 0;
+    std::atomic<size_t> ref = {2};
   };
   struct KeyValueStatus {
     valvec<char> prefix;
@@ -102,6 +103,7 @@ private:
     TempFileDeleteOnClose valueFile;
     bool isValueBuild = false;
     bool isUseDictZip = false;
+	bool isReadFromFile = true;
     std::future<Status> wait;
     valvec<std::unique_ptr<BuildIndexParams>> build;
   };
@@ -128,6 +130,8 @@ private:
     BuildStoreSync = 2,
   };
   Status BuildStore(KeyValueStatus& kvs, DictZipBlobStore::ZipBuilder* zbuilder, uint64_t flag);
+  std::future<Status> CompressDict(fstring tmpDictFile, fstring dict,
+                                   std::string* type, long long* td);
   Status WaitBuildIndex();
   Status WaitBuildStore();
   struct BuildReorderParams {
@@ -158,13 +162,16 @@ private:
                     KeyValueStatus& kvs,
                     BlockHandle& dataBlock,
                     long long& t5, long long& t6, long long& t7);
-  Status WriteSSTFile(long long t3, long long t4,
+  Status WriteSSTFile(long long t3, long long t4, long long td,
                       fstring tmpDictFile,
+                      const std::string& dictInfo, uint64_t dicthash,
                       const DictZipBlobStore::ZipStat& dzstat);
-  Status WriteSSTFileMulti(long long t3, long long t4,
+  Status WriteSSTFileMulti(long long t3, long long t4, long long td,
                            fstring tmpDictFile,
+                           const std::string& dictType, uint64_t dicthash,
                            const DictZipBlobStore::ZipStat& dzstat);
-  Status WriteMetaData(std::initializer_list<std::pair<const std::string*, BlockHandle>> blocks);
+  Status WriteMetaData(const std::string& dictType,
+                       std::initializer_list<std::pair<const std::string*, BlockHandle>> blocks);
   DictZipBlobStore::ZipBuilder* createZipBuilder() const;
 
   Arena arena_;
@@ -179,7 +186,7 @@ private:
   size_t nameSeed_ = 0;
   size_t keyDataSize_ = 0;
   size_t valueDataSize_ = 0;
-  valvec<std::unique_ptr<KeyValueStatus>> histogram_;
+  valvec<std::unique_ptr<KeyValueStatus>> prefixBuildInfos_;
   TerarkIndex::KeyStat *currentStat_ = nullptr;
   valvec<byte_t> prevUserKey_;
   TempFileDeleteOnClose tmpSentryFile_;
@@ -201,6 +208,7 @@ private:
   WritableFileWriter* file_;
   uint64_t offset_ = 0;
   uint64_t estimateOffset_ = 0;
+  size_t dictSize_ = 0;
   float estimateRatio_ = 0;
   uint64_t zeroSeqCount_ = 0;
   size_t seqExpandSize_ = 0;
@@ -214,6 +222,7 @@ private:
   bool waitInited_ = false;
   bool closed_ = false;  // Either Finish() or Abandon() has been called.
   bool isReverseBytewiseOrder_;
+  bool ignore_key_type_;
 #if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
   bool isUint64Comparator_;
 #endif

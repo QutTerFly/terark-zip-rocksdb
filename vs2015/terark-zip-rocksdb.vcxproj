@@ -22,9 +22,11 @@
     <ClCompile Include="..\3rdparty\Cyan4973\xxhash.c" />
     <ClCompile Include="..\src\table\terark_zip_common.cc" />
     <ClCompile Include="..\src\table\terark_zip_config.cc" />
+    <ClCompile Include="..\src\table\terark_zip_entry_index.cc" />
     <ClCompile Include="..\src\table\terark_zip_index.cc">
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="..\src\table\terark_zip_memtable.cc" />
     <ClCompile Include="..\src\table\terark_zip_table.cc" />
     <ClCompile Include="..\src\table\terark_zip_table_builder.cc" />
     <ClCompile Include="..\src\table\terark_zip_table_reader.cc" />
@@ -41,9 +43,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\rocksdb\msvc14\rocksdb.vcxproj">
       <Project>{9b0ec5aa-adfe-3d4e-ba5b-e09577b15447}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\snappy-windows-1.1.1.8\src\snappy.vcxproj">
-      <Project>{6819c17d-58df-4f01-8e5b-86a6d5a1b29c}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\terark\vs2015\terark-fsa\terark-core\terark-core.vcxproj">
       <Project>{c5ecd2a9-c18e-4c04-b2f1-c5d6f236f5ae}</Project>
@@ -65,7 +64,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -86,7 +85,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>MultiByte</CharacterSet>
+    <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -108,14 +107,14 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
-    <LibraryPath>..\..\rocksdb\msvc14\Debug;..\..\terark\vs2015\terark-fsa\x64\Debug;$(LibraryPath)</LibraryPath>
-    <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
+    <IncludePath>$(ProjectDir)\..\..\OpenSSL-Win64\include;$(ProjectDir)\..\..\cryptopp\include;$(ProjectDir)\..\..\terark\3rdparty\getopt_win;$(ProjectDir)\..\3rdparty\Cyan4973;$(ProjectDir)\..\3rdparty;$(ProjectDir)\..\..\boost-home;$(ProjectDir)\..\..\rocksdb\include;$(ProjectDir)\..\..\rocksdb;$(ProjectDir)\..\..\terark\src;$(ProjectDir)\..\..\terark\3rdparty\zstd;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)\..\..\rocksdb\msvc14\Release;$(ProjectDir)\..\..\terark\vs2015\terark-fsa\x64\Release;$(LibraryPath)</LibraryPath>
+    <SourcePath>$(ProjectDir)\..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\osc\snappy-windows-1.1.1.8\include;C:\osc\OpenSSL-Win64\include;C:\osc\cryptopp\include;..\..\terark\3rdparty\getopt_win;..\3rdparty\Cyan4973;..\3rdparty;..\..\boost-home;..\..\rocksdb\include;..\..\rocksdb;C:\osc\terark\src;$(IncludePath)</IncludePath>
-    <LibraryPath>..\..\rocksdb\msvc14\Release;..\..\terark\vs2015\terark-fsa\x64\Release;$(LibraryPath)</LibraryPath>
-    <SourcePath>..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
+    <IncludePath>$(ProjectDir)..\3rdparty;$(ProjectDir)..\3rdparty\Cyan4973;$(ProjectDir)..\..\cryptopp\include;$(ProjectDir)..\..\OpenSSL-Win64\include;$(ProjectDir)..\..\terark\3rdparty\getopt_win;$(ProjectDir)..\..\boost-home;$(ProjectDir)..\..\rocksdb\include;$(ProjectDir)..\..\rocksdb;$(ProjectDir)..\..\terark\src;$(ProjectDir)..\..\terark\3rdparty\zstd;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)\..\..\rocksdb\msvc14\Release;$(ProjectDir)\..\..\terark\vs2015\terark-fsa\x64\Release;$(LibraryPath)</LibraryPath>
+    <SourcePath>$(ProjectDir)\..\..\terark\3rdparty\xxHash;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -130,9 +129,12 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;SNAPPY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\Code\osc\snappy-windows-1.1.1.8\include</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <MinimalRebuild>false</MinimalRebuild>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>terark-zbs-d.lib;terark-fsa-d.lib;terark-core-d.lib;rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -155,11 +157,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;SNAPPY;NDEBUG=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;OS_WIN;$ZSTD_DLL_IMPORT=1;$_USRDLL;$TERARK_CREATE_DLL;NDEBUG=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>rocksdblib.lib;Rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

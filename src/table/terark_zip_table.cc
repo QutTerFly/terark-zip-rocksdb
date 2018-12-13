@@ -28,17 +28,22 @@
 
 // boost headers
 #include <boost/predef/other/endian.h>
+#if defined(TerocksPrivateCode)
 # include <boost/archive/iterators/binary_from_base64.hpp>
 # include <boost/archive/iterators/transform_width.hpp>
+#endif // TerocksPrivateCode
 
 // rocksdb headers
 #include <table/meta_blocks.h>
 
 // terark headers
 #include <terark/lcast.hpp>
+#if defined(TerocksPrivateCode)
 # include <terark/zbs/xxhash_helper.hpp>
+#endif // TerocksPrivateCode
 
 // 3rd-party headers
+#if defined(TerocksPrivateCode)
 # include <nlohmann/json.hpp>
 # ifdef USE_CRYPTOPP
 #   include <cryptopp/cryptlib.h>
@@ -60,6 +65,7 @@ extern "C"
 #   include <openssl/bio.h>
 }
 # endif
+#endif // TerocksPrivateCode
 
 static std::once_flag PrintVersionHashInfoFlag;
 
@@ -71,6 +77,7 @@ const char* git_version_hash_info_terark_zip_rocksdb();
 #endif
 
 void PrintVersionHashInfo(rocksdb::Logger* info_log) {
+#if defined(TerocksPrivateCode)
   std::call_once(PrintVersionHashInfoFlag, [info_log] {
 # ifndef _MSC_VER
     INFO(info_log, "core %s", git_version_hash_info_core());
@@ -79,8 +86,10 @@ void PrintVersionHashInfo(rocksdb::Logger* info_log) {
     INFO(info_log, "terark_zip_rocksdb %s", git_version_hash_info_terark_zip_rocksdb());
 # endif
   });
+#endif // TerocksPrivateCode
 }
 
+#if defined(TerocksPrivateCode)
 
 static std::string base64_decode(const std::string& base64) {
   using namespace boost::archive::iterators;
@@ -99,6 +108,7 @@ static std::string base64_decode(const std::string& base64) {
   return ret;
 }
 
+#endif // TerocksPrivateCode
 
 
 #ifdef TERARK_SUPPORT_UINT64_COMPARATOR
@@ -120,6 +130,7 @@ const std::string kTerarkZipTableOffsetBlock       = "TerarkZipTableOffsetBlock"
 const std::string kTerarkZipTableCommonPrefixBlock = "TerarkZipTableCommonPrefixBlock";
 const std::string kTerarkEmptyTableKey             = "ThisIsAnEmptyTable";
 
+#if defined(TerocksPrivateCode)
 
 using terark::XXHash64;
 
@@ -133,9 +144,13 @@ static const std::string g_szTerarkPublikKey =
 "g4UYTb3i9pkmxs2TAQt+rXaB8dpTpetTy+2nscGw+Ya4lHSZEyZlWGfktdR/jRlnyZMElXIq"
 "ZpEctXh0pkFys/ePkMiDLEAGnQIBEQ==";
 
+#endif // TerocksPrivateCode
 const std::string kTerarkZipTableBuildTimestamp = "terark.build.timestamp";
+const std::string kTerarkZipTableDictInfo = "terark.build.dict_info";
+const std::string kTerarkZipTableDictSize = "terark.build.dict_size";
 const std::string kTerarkZipTableEstimateRatio = "terark.build.estimate_ratio";
 
+#if defined(TerocksPrivateCode)
 
 LicenseInfo::LicenseInfo() {
   using namespace std::chrono;
@@ -426,6 +441,7 @@ void LicenseInfo::print_error(const char* file_name, bool startup, rocksdb::Logg
 #undef RED_END
 }
 
+#endif // TerocksPrivateCode
 
 const size_t CollectInfo::queue_size = 8;
 const double CollectInfo::hard_ratio = 0.9;
@@ -457,7 +473,7 @@ void CollectInfo::update(uint64_t timestamp
 }
 
 bool CollectInfo::hard(size_t raw, size_t zip) {
-  return double(zip) / double(raw) > hard_ratio;
+  return double(zip) > hard_ratio * double(raw);
 }
 
 bool CollectInfo::hard() const {
@@ -540,6 +556,7 @@ NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
       factory->GetPrintableTableOptions().c_str()
     );
   }
+#if defined(TerocksPrivateCode)
   auto& license = factory->GetLicense();
   std::string license_file = tzto.extendedConfigFile;
   if (license_file.empty()) {
@@ -560,6 +577,7 @@ NewTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
     }
   }
   license.print_error(license_file.c_str(), true, nullptr);
+#endif // TerocksPrivateCode
   return factory;
 }
 
@@ -571,7 +589,18 @@ SingleTerarkZipTableFactory(const TerarkZipTableOptions& tzto,
   return factory;
 }
 
-inline static
+bool IsForwardBytewiseComparator(const Comparator* cmp) {
+#if 1
+  const fstring name = cmp->Name();
+  if (name.startsWith("RocksDB_SE_")) {
+    return true;
+  }
+  return name == "leveldb.BytewiseComparator";
+#else
+  return BytewiseComparator() == cmp;
+#endif
+}
+
 bool IsBytewiseComparator(const Comparator* cmp) {
 #if 1
   const fstring name = cmp->Name();
@@ -740,7 +769,7 @@ TerarkZipTableFactory::NewTableBuilder(
     }
   }
   else {
-    keyPrefixLen = GetFixedPrefixLen(table_builder_options.ioptions.prefix_extractor);
+    keyPrefixLen = GetFixedPrefixLen(table_builder_options.moptions.prefix_extractor.get());
     if (keyPrefixLen != 0) {
       if (table_options_.keyPrefixLen != 0) {
         if (keyPrefixLen != table_options_.keyPrefixLen) {
@@ -755,6 +784,9 @@ TerarkZipTableFactory::NewTableBuilder(
     else {
       keyPrefixLen = table_options_.keyPrefixLen;
     }
+  }
+  if (table_builder_options.sst_purpose != kEssenceSst) {
+    keyPrefixLen = 0;
   }
 #if defined(TERARK_SUPPORT_UINT64_COMPARATOR) && BOOST_ENDIAN_LITTLE_BYTE
   if (fstring(userCmp->Name()) == "rocksdb.Uint64Comparator") {

@@ -5,6 +5,7 @@
 #include <rocksdb/db.h>
 #include <rocksdb/options.h>
 #include <rocksdb/table.h>
+#include "rocksdb/utilities/write_batch_with_index.h"
 #ifdef _MSC_VER
 # include <Windows.h>
 # define strcasecmp _stricmp
@@ -133,6 +134,7 @@ TerarkZipAutoConfigForOnlineDB_DBOptions(struct DBOptions& dbo, size_t cpuNum)
   dbo.max_subcompactions = 1; // no sub compactions
   dbo.base_background_compactions = 3;
   dbo.max_background_compactions = 5;
+  dbo.allow_concurrent_memtable_write = false;
 
   dbo.env->SetBackgroundThreads(max(1,min(3,iCpuNum*3/8)), rocksdb::Env::LOW);
   dbo.env->SetBackgroundThreads(max(1,min(2,iCpuNum*2/8)), rocksdb::Env::HIGH);
@@ -263,6 +265,8 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   MyGetBool  (tzo, warmUpValueOnOpen       , false);
   MyGetBool  (tzo, disableSecondPassIter   , false);
   MyGetBool  (tzo, enableCompressionProbe  , true );
+  MyGetBool  (tzo, disableCompressDict     , false);
+  
 
   MyGetDouble(tzo, estimateCompressionRatio, 0.20 );
   MyGetDouble(tzo, sampleRatio             , 0.06 );
@@ -324,7 +328,7 @@ bool TerarkZipCFOptionsFromEnv(ColumnFamilyOptions& cfo) {
   }
   MyGetXiB(cfo, write_buffer_size);
   MyGetXiB(cfo, target_file_size_base);
-  MyGetBool(cfo, enable_partial_remove, false);
+  MyGetBool(cfo, enable_lazy_compaction, true);
   MyOverrideInt(cfo, max_write_buffer_number);
   MyOverrideInt(cfo, target_file_size_multiplier);
   MyOverrideInt(cfo, num_levels                 );
@@ -393,5 +397,8 @@ TerarkZipMultiCFOptionsFromEnv(const DBOptions& db_options,
     TerarkZipDBOptionsFromEnv(auto_const_cast(db_options));
   }
 }
+
+ROCKSDB_REGISTER_MEM_TABLE("patricia", PatriciaTrieRepFactory);
+ROCKSDB_REGISTER_WRITE_BATCH_WITH_INDEX(patricia);
 
 }

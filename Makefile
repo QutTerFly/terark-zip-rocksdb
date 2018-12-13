@@ -29,7 +29,7 @@ ifneq "${err}" "0"
    $(error err = ${err} MAKEFILE_LIST = ${MAKEFILE_LIST}, PWD = ${PWD}, gen_sh = ${gen_sh} "${CXX}" ${COMPILER} ${BUILD_ROOT}/env.mk)
 endif
 
-TERARK_INC := -I${TERARK_CORE_HOME}/src -I./3rdparty -I./3rdparty/Cyan4973 ${BOOST_INC}
+TERARK_INC := -I${TERARK_CORE_HOME}/src -I$(TERARK_CORE_HOME)/3rdparty/zstd -I./3rdparty -I./3rdparty/Cyan4973 ${BOOST_INC}
 
 include ${BUILD_ROOT}/env.mk
 
@@ -97,6 +97,7 @@ COMMON_C_FLAGS  += -Wformat=2 -Wcomment
 COMMON_C_FLAGS  += -Wall -Wextra
 COMMON_C_FLAGS  += -Wno-unused-parameter
 COMMON_C_FLAGS  += -D_GNU_SOURCE # For cygwin
+COMMON_C_FLAGS  += -DROCKSDB_SUPPORT_THREAD_LOCAL
 
 #-v #-Wall -Wparentheses
 #COMMON_C_FLAGS  += ${COMMON_C_FLAGS} -Wpacked -Wpadded -v

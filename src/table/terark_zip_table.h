@@ -11,12 +11,17 @@
 #define TERARK_ZIP_TABLE_H_
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <stdio.h>
 
+#include "rocksdb/status.h"
 
+#define TerocksPrivateCode
+#if defined(TerocksPrivateCode)
 // this macro for remove private code ...
+#endif // TerocksPrivateCode
 
 namespace rocksdb {
 
@@ -104,7 +109,9 @@ struct TerarkZipTableOptions {
   int    minPreadLen         = -1;
   int    cacheShards         = 17; // to reduce lock competition
   size_t cacheCapacityBytes  = 0;  // non-zero implies direct io read
-  char   reserveBytes[24]    = {};
+  bool   disableCompressDict = false;
+  bool   useOldSecondPassMethod = false;
+  char   reserveBytes[22]    = {};
 };
 
 void TerarkZipDeleteTempFiles(const std::string& tmpPath);
@@ -143,6 +150,15 @@ bool TerarkZipIsBlackListCF(const std::string& cfname);
 void
 TerarkZipMultiCFOptionsFromEnv(const struct DBOptions& db_options,
       const std::vector<struct ColumnFamilyDescriptor>& cfvec);
+
+const class WriteBatchEntryIndexFactory*
+patricia_WriteBatchEntryIndexFactory(const WriteBatchEntryIndexFactory* fallback = nullptr);
+
+class MemTableRepFactory*
+NewPatriciaTrieRepFactory(std::shared_ptr<class MemTableRepFactory> fallback = nullptr);
+
+class MemTableRepFactory*
+NewPatriciaTrieRepFactory(const std::unordered_map<std::string, std::string>& options, Status* s);
 
 class TableFactory*
 NewTerarkZipTableFactory(const TerarkZipTableOptions&,

@@ -4,7 +4,12 @@ TerarkZipTable for rocksdb has two modules:
 1. a rocksdb SSTable(Static Sorted Table) implementation.
 2. a MemTable(Patricia Trie) implementation for rocksdb.
 
-`terark-zip-rocksdb` is a submodule of [TerarkDB](https://github.com/Terark/terarkdb).
+TerarkZipTable leverage terark-zip algorithm to rocksdb, by using TerarkZipTable,
+you can store more(3x+ than snappy) on disk and load more more data into memory,
+and greatly improve the reading speed! All data are accessed at memory speed!
+
+Set single SST file larger will get better compression, to tune SST file file size,
+see [rocksdb tuning guide](https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide)
 
 ## License
 This software is open source with Apache 2.0 LICENSE, with NOTES:
@@ -128,7 +133,11 @@ LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
   /// larger MemTable yield larger level0 SST file
   /// larger SST file make terark-zip better
   options.write_buffer_size     =  1ull << 30; // 1G
-  options.target_file_size_base =  8ull << 30; // 8G
+  options.target_file_size_base =  1ull << 30; // 1G
+
+  /// single sst file size on greater levels should be larger
+  /// sstfile_size(level[n+1]) = sstfile_size(level[n]) * target_file_size_multiplier
+  options.target_file_size_multiplier = 2; // can be larger, such as 3,5,10
 
   /// turn off rocksdb write slowdown, optional. If write slowdown is enabled
   /// and write was really slow down, you may doubt that terark-zip caused it
@@ -138,6 +147,3 @@ LDFLAGS += -lterark-zbs-r -lterark-fsa-r -lterark-core-r
   options.hard_pending_compaction_bytes_limit = 0;
 ```
 
-## Contact
-- contact@terark.com
-- [terark.com](http://terark.com)
